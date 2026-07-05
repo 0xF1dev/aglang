@@ -1,0 +1,13 @@
+$ this program prints all uppercase letters $
+
+01000001>''; $ move 65 (A char in ascii) to reg2 $
+11010>:; $ push alphabet counter (from A to Z) into stack $
+[ $ loop (ends when first value in stack is 0) $
+    ''>\; $ output the letter $
+    1010>\; $ newline $
+    ''+1; $ add 1 to the ascii value to go to the next letter $
+    :>'; $ move counter to reg1 $
+    :!; $ pop old counter $
+    '-1; $ remove 1 from the counter $
+    '>:; $ push the updated counter to the stack $
+]

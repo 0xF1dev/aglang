@@ -1,0 +1,7 @@
+$ this program reprints whatever the user writes $
+
+|; $ gets user input from stdin and saves it in the stack (with a 0x00 at the bottom for delimiting, the values get stored in reverse order) $
+[
+:>\; $ outputs top value in the stack $
+:!; $ pops from the stack $
+]
