@@ -41,8 +41,12 @@ impl Interpreter {
                         Argument::R0 => self.r0 = value,
                         Argument::R1 => self.r1 = value,
                         Argument::Stack => self.stack.push(value),
-                        Argument::StdOut => {
+                        Argument::StdOut { as_number: false } => {
                             print!("{}", char::from(value));
+                            io::stdout().flush().unwrap()
+                        },
+                        Argument::StdOut { as_number: true } => {
+                            print!("{value}");
                             io::stdout().flush().unwrap()
                         }
                         _ => {

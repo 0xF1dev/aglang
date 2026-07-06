@@ -15,8 +15,8 @@ pub enum StatementTypes {
     Remainder,
 }
 
-const VALID_TOKENS: [char; 17] = [
-    ';', '0', '1', '[', ']', '\'', '"', ':', '\\', '|', '>', '!', '+', '-', '*', '/', '%',
+const VALID_TOKENS: [char; 18] = [
+    ';', '0', '1', '[', ']', '\'', '"', ':', '\\', '#', '|', '>', '!', '+', '-', '*', '/', '%',
 ];
 const STATEMENT_TOKENS: [char; 8] = ['|', '>', '!', '+', '-', '*', '/', '%'];
 
@@ -27,13 +27,13 @@ pub enum LoopState {
     Both,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Argument {
     Literal(u8),
     R0,
     R1,
     Stack,
-    StdOut,
+    StdOut { as_number: bool },
 }
 
 impl fmt::Display for Argument {
@@ -238,7 +238,8 @@ fn parse_argument(arg: &str, statement_index: u32) -> Option<Argument> {
         "'" => Some(Argument::R0),
         "''" | "\"" => Some(Argument::R1),
         ":" => Some(Argument::Stack),
-        "\\" => Some(Argument::StdOut),
+        "\\" => Some(Argument::StdOut { as_number: false }),
+        "\\#" => Some(Argument::StdOut { as_number: true }),
         s if s.chars().all(|c| c == '0' || c == '1') => match u8::from_str_radix(s, 2) {
             Ok(num) => Some(Argument::Literal(num)),
             Err(_) => {

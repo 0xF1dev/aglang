@@ -6,6 +6,7 @@ pub struct Compiler {
     active_loops: Vec<u32>,
     input_loop_count: u32,
     active_input_loops: Vec<u32>,
+    decimal_print_loop_count: u32,
 }
 
 impl Compiler {
@@ -15,6 +16,7 @@ impl Compiler {
             active_loops: Vec::new(),
             input_loop_count: 0,
             active_input_loops: Vec::new(),
+            decimal_print_loop_count: 0,
         }
     }
 
@@ -24,8 +26,21 @@ impl Compiler {
         if statements
             .iter()
             .any(|s| s.statement_type == StatementTypes::Input)
+            && statements
+                .iter()
+                .any(|s| s.arg2 == Some(Argument::StdOut { as_number: true }))
+        {
+            asm.push_str(".section .bss\n.lcomm input_buf, 256\n.lcomm decimal_buf, 3\n\n");
+        } else if statements
+            .iter()
+            .any(|s| s.statement_type == StatementTypes::Input)
         {
             asm.push_str(".section .bss\n.lcomm input_buf, 256\n\n");
+        } else if statements
+            .iter()
+            .any(|s| s.arg2 == Some(Argument::StdOut { as_number: true }))
+        {
+            asm.push_str(".section .bss\n.lcomm decimal_buf, 3\n\n");
         }
 
         asm.push_str(".section .text\nmain:\n");
@@ -53,14 +68,29 @@ impl Compiler {
                     (Argument::Literal(val), Argument::Stack) => {
                         asm.push_str(format!("    push {val}\n").as_str());
                     }
-                    (Argument::Literal(val), Argument::StdOut) => {
-                        asm.push_str(format!("    push {val}\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, rsp\n    mov rdx, 1\n    syscall\n    pop rax\n").as_str())
+                    (Argument::Literal(val), Argument::StdOut { as_number: false | true }) => {
+                        if statement.arg2.unwrap() == (Argument::StdOut { as_number: true }) {
+                            asm.push_str(format!("    mov rax, {val}\n    lea rcx, [decimal_buf + 2 + rip]\n    mov rbx, 10\n    .dec_loop{0}:\n    xor rdx, rdx\n    div rbx\n    add dl, '0'\n    mov [rcx], dl\n    dec rcx\n    test rax, rax\n    jnz .dec_loop{0}\n    lea rdx, [decimal_buf + 2 + rip]\n    sub rdx, rcx\n    inc rcx\n    mov rsi, rcx\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, rcx\n    syscall\n", self.decimal_print_loop_count).as_str());
+                            self.decimal_print_loop_count += 1;
+                        } else {
+                            asm.push_str(format!("    push {val}\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, rsp\n    mov rdx, 1\n    syscall\n    pop rax\n").as_str())
+                        }
                     }
-                    (Argument::R0 | Argument::R1, Argument::StdOut) => {
-                        asm.push_str(format!("    push {0}\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, rsp\n    mov rdx, 1\n    syscall\n    pop {0}\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full)).as_str())
+                    (Argument::R0 | Argument::R1, Argument::StdOut { as_number: false | true }) => {
+                        if statement.arg2.unwrap() == (Argument::StdOut { as_number: true }) {
+                            asm.push_str(format!("    mov rax, {0}\n    lea rcx, [decimal_buf + 2 + rip]\n    mov rbx, 10\n    .dec_loop{1}:\n    xor rdx, rdx\n    div rbx\n    add dl, '0'\n    mov [rcx], dl\n    dec rcx\n    test rax, rax\n    jnz .dec_loop{1}\n    lea rdx, [decimal_buf + 2 + rip]\n    sub rdx, rcx\n    inc rcx\n    mov rsi, rcx\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, rcx\n    syscall\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full), self.decimal_print_loop_count).as_str());
+                            self.decimal_print_loop_count += 1;
+                        } else {
+                            asm.push_str(format!("    push {0}\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, rsp\n    mov rdx, 1\n    syscall\n    pop {0}\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full)).as_str())
+                        }
                     }
-                    (Argument::Stack, Argument::StdOut) => {
-                        asm.push_str("    mov rax, 1\n    mov rdi, 1\n    mov rsi, rsp\n    mov rdx, 1\n    syscall\n")
+                    (Argument::Stack, Argument::StdOut { as_number: false | true }) => {
+                        if statement.arg2.unwrap() == (Argument::StdOut { as_number: true }) {
+                            asm.push_str(format!("    mov rax, [rsp]\n    lea rcx, [decimal_buf + 2 + rip]\n    mov rbx, 10\n    .dec_loop{0}:\n    xor rdx, rdx\n    div rbx\n    add dl, '0'\n    mov [rcx], dl\n    dec rcx\n    test rax, rax\n    jnz .dec_loop{0}\n    lea rdx, [decimal_buf + 2 + rip]\n    sub rdx, rcx\n    inc rcx\n    mov rsi, rcx\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, rcx\n    syscall\n", self.decimal_print_loop_count).as_str());
+                            self.decimal_print_loop_count += 1;
+                        } else {
+                            asm.push_str("    mov rax, 1\n    mov rdi, 1\n    mov rsi, rsp\n    mov rdx, 1\n    syscall\n")
+                        }
                     }
                     (Argument::Stack, Argument::R0 | Argument::R1) => {
                         asm.push_str(format!("    movzx rax, byte ptr [rsp]\n    mov {}, al\n", arg_to_asm_string(statement.arg2.unwrap(), ArgSize::Small)).as_str())
@@ -82,7 +112,7 @@ impl Compiler {
                 StatementTypes::Remove => match statement.arg1.unwrap() {
                     Argument::R0 | Argument::R1 => {
                         asm.push_str(format!("    xor {0}, {0}\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full)).as_str())
-                    },
+                    }
                     Argument::Stack => {
                         asm.push_str("    pop rax\n")
                     }
@@ -101,17 +131,17 @@ impl Compiler {
                     self.input_loop_count += 1;
                     self.active_input_loops.push(self.input_loop_count - 1);
                     asm.push_str(format!("    mov rax, 0\n    mov rdi, 0\n    lea rsi, [rip + input_buf]\n    mov rdx, 256\n    syscall\n    mov rcx, rax\n    sub rcx, 2\n    push 0\n.input_loop{0}:\n    lea rbx, [rip + input_buf]\n    movzx rbx, byte ptr [rbx + rcx]\n    push rbx\n    dec rcx\n    cmp rcx, 0\n    jge .input_loop{0}\n", self.input_loop_count - 1).as_str())
-                },
+                }
                 StatementTypes::Add => match (statement.arg1.unwrap(), statement.arg2.unwrap()) {
                     (Argument::R0 | Argument::R1, Argument::Literal(val)) => {
                         asm.push_str(format!("    add {}, {val}\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Small)).as_str())
-                    },
+                    }
                     (Argument::R0 | Argument::R1, Argument::R0 | Argument::R1) => {
                         asm.push_str(format!("    add {}, {}\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Small), arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Small)).as_str())
                     },
                     (Argument::R0 | Argument::R1, Argument::Stack) => {
                         asm.push_str(format!("    add {}, [rsp]\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Small)).as_str())
-                    },
+                    }
                     _ => {
                         error(
                             Box::new(SyntaxError::InvalidArguments),
@@ -126,13 +156,13 @@ impl Compiler {
                 StatementTypes::Subtract => match (statement.arg1.unwrap(), statement.arg2.unwrap()) {
                     (Argument::R0 | Argument::R1, Argument::Literal(val)) => {
                         asm.push_str(format!("    sub {}, {val}\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Small)).as_str())
-                    },
+                    }
                     (Argument::R0 | Argument::R1, Argument::R0 | Argument::R1) => {
                         asm.push_str(format!("    sub {}, {}\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Small), arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Small)).as_str())
-                    },
+                    }
                     (Argument::R0 | Argument::R1, Argument::Stack) => {
                         asm.push_str(format!("    sub {}, [rsp]\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Small)).as_str())
-                    },
+                    }
                     _ => {
                         error(
                             Box::new(SyntaxError::InvalidArguments),
@@ -147,13 +177,13 @@ impl Compiler {
                 StatementTypes::Multiply => match (statement.arg1.unwrap(), statement.arg2.unwrap()) {
                     (Argument::R0 | Argument::R1, Argument::Literal(val)) => {
                         asm.push_str(format!("    mul {}, {val}\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Small)).as_str())
-                    },
+                    }
                     (Argument::R0 | Argument::R1, Argument::R0 | Argument::R1) => {
                         asm.push_str(format!("    mul {}, {}\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Small), arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Small)).as_str())
-                    },
+                    }
                     (Argument::R0 | Argument::R1, Argument::Stack) => {
                         asm.push_str(format!("    mul {}, [rsp]\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Small)).as_str())
-                    },
+                    }
                     _ => {
                         error(
                             Box::new(SyntaxError::InvalidArguments),
@@ -168,13 +198,13 @@ impl Compiler {
                 StatementTypes::Divide => match (statement.arg1.unwrap(), statement.arg2.unwrap()) {
                     (Argument::R0 | Argument::R1, Argument::Literal(val)) => {
                         asm.push_str(format!("    mov al, {0}\n    mov ah, 0\n    mov r14b, {val}\n    div r14b\n    mov {0}, al\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Small)).as_str())
-                    },
+                    }
                     (Argument::R0 | Argument::R1, Argument::R0 | Argument::R1) => {
                         asm.push_str(format!("    mov al, {0}\n    mov ah, 0\n    mov r14b, {1}\n    div r14b\n    mov {0}, al\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Small), arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Small)).as_str())
-                    },
+                    }
                     (Argument::R0 | Argument::R1, Argument::Stack) => {
                         asm.push_str(format!("    mov al, {0}\n    mov ah, 0\n    mov r14b, [rsp]\n    div r14b\n    mov {0}, al\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Small)).as_str())
-                    },
+                    }
                     _ => {
                         error(
                             Box::new(SyntaxError::InvalidArguments),
@@ -189,13 +219,13 @@ impl Compiler {
                 StatementTypes::Remainder => match (statement.arg1.unwrap(), statement.arg2.unwrap()) {
                     (Argument::R0 | Argument::R1, Argument::Literal(val)) => {
                         asm.push_str(format!("    mov al, {0}\n    mov ah, 0\n    mov r14b, {val}\n    div r14b\n    mov {0}, ah\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Small)).as_str())
-                    },
+                    }
                     (Argument::R0 | Argument::R1, Argument::R0 | Argument::R1) => {
                         asm.push_str(format!("    mov al, {0}\n    mov ah, 0\n    mov r14b, {1}\n    div r14b\n    mov {0}, ah\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Small), arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Small)).as_str())
-                    },
+                    }
                     (Argument::R0 | Argument::R1, Argument::Stack) => {
                         asm.push_str(format!("    mov al, {0}\n    mov ah, 0\n    mov r14b, [rsp]\n    div r14b\n    mov {0}, ah\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Small)).as_str())
-                    },
+                    }
                     _ => {
                         error(
                             Box::new(SyntaxError::InvalidArguments),
