@@ -153,8 +153,9 @@ impl Interpreter {
                     }
                 }
                 StatementTypes::None
-                if statement.loop_state == Some(LoopState::End)
-                    || statement.loop_state == Some(LoopState::Both) => {}
+                    if statement.loop_state == Some(LoopState::End)
+                        || statement.loop_state == Some(LoopState::Start)
+                        || statement.loop_state == Some(LoopState::Both) => {}
                 _ => error(
                     Box::new(SyntaxError::InvalidStatement),
                     self.instruction_pointer,
