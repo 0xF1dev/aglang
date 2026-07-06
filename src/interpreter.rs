@@ -1,8 +1,8 @@
 use std::io;
 use std::io::Write;
 
-use crate::parser::{Statement, StatementTypes, Argument, LoopState};
 use crate::error::{SyntaxError, error, RuntimeError};
+use crate::parser::{Argument, LoopState, Statement, StatementTypes};
 
 pub struct Interpreter {
     r0: u8,
@@ -41,12 +41,18 @@ impl Interpreter {
                         Argument::R0 => self.r0 = value,
                         Argument::R1 => self.r1 = value,
                         Argument::Stack => self.stack.push(value),
-                        Argument::StdOut => { print!("{}", char::from(value)); io::stdout().flush().unwrap() },
+                        Argument::StdOut => {
+                            print!("{}", char::from(value));
+                            io::stdout().flush().unwrap()
+                        }
                         _ => {
                             error(
                                 Box::new(SyntaxError::InvalidDestination),
                                 self.instruction_pointer,
-                                format!("Cannot write to argument of type: {}", statement.arg1.unwrap()),
+                                format!(
+                                    "Cannot write to argument of type: {}",
+                                    statement.arg1.unwrap()
+                                ),
                             );
                             return;
                         }
@@ -71,7 +77,10 @@ impl Interpreter {
                             error(
                                 Box::new(SyntaxError::InvalidDestination),
                                 self.instruction_pointer,
-                                format!("Cannot write to argument of type: {}", statement.arg1.unwrap()),
+                                format!(
+                                    "Cannot write to argument of type: {}",
+                                    statement.arg1.unwrap()
+                                ),
                             );
                             return;
                         }
@@ -86,7 +95,10 @@ impl Interpreter {
                             error(
                                 Box::new(SyntaxError::InvalidDestination),
                                 self.instruction_pointer,
-                                format!("Cannot write to argument of type: {}", statement.arg1.unwrap()),
+                                format!(
+                                    "Cannot write to argument of type: {}",
+                                    statement.arg1.unwrap()
+                                ),
                             );
                             return;
                         }
@@ -101,7 +113,10 @@ impl Interpreter {
                             error(
                                 Box::new(SyntaxError::InvalidDestination),
                                 self.instruction_pointer,
-                                format!("Cannot write to argument of type: {}", statement.arg1.unwrap()),
+                                format!(
+                                    "Cannot write to argument of type: {}",
+                                    statement.arg1.unwrap()
+                                ),
                             );
                             return;
                         }
@@ -116,7 +131,10 @@ impl Interpreter {
                             error(
                                 Box::new(SyntaxError::InvalidDestination),
                                 self.instruction_pointer,
-                                format!("Cannot write to argument of type: {}", statement.arg1.unwrap()),
+                                format!(
+                                    "Cannot write to argument of type: {}",
+                                    statement.arg1.unwrap()
+                                ),
                             );
                             return;
                         }
@@ -131,7 +149,10 @@ impl Interpreter {
                             error(
                                 Box::new(SyntaxError::InvalidDestination),
                                 self.instruction_pointer,
-                                format!("Cannot write to argument of type: {}", statement.arg1.unwrap()),
+                                format!(
+                                    "Cannot write to argument of type: {}",
+                                    statement.arg1.unwrap()
+                                ),
                             );
                             return;
                         }
@@ -146,7 +167,10 @@ impl Interpreter {
                             error(
                                 Box::new(SyntaxError::InvalidDestination),
                                 self.instruction_pointer,
-                                format!("Cannot write to argument of type: {}", statement.arg1.unwrap()),
+                                format!(
+                                    "Cannot write to argument of type: {}",
+                                    statement.arg1.unwrap()
+                                ),
                             );
                             return;
                         }
