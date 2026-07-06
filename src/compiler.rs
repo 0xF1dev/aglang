@@ -43,7 +43,7 @@ impl Compiler {
             asm.push_str(".section .bss\n.lcomm decimal_buf, 3\n\n");
         }
 
-        asm.push_str(".section .text\nmain:\n");
+        asm.push_str(".section .text\nmain:\n    xor r12, r12\n    xor r13, r13\n");
 
         for (statement_index, statement) in statements.iter().enumerate() {
             if statement.loop_state == Some(LoopState::Start)
@@ -93,7 +93,7 @@ impl Compiler {
                         }
                     }
                     (Argument::Stack, Argument::R0 | Argument::R1) => {
-                        asm.push_str(format!("    movzx rax, byte ptr [rsp]\n    mov {}, al\n", arg_to_asm_string(statement.arg2.unwrap(), ArgSize::Small)).as_str())
+                        asm.push_str(format!("    mov {0}, [rsp]\n", arg_to_asm_string(statement.arg2.unwrap(), ArgSize::Full)).as_str())
                     }
                     (Argument::R0 | Argument::R1, Argument::Stack) => {
                         asm.push_str(format!("    push {}\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full)).as_str())
@@ -137,8 +137,8 @@ impl Compiler {
                         asm.push_str(format!("    add {}, {val}\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Small)).as_str())
                     }
                     (Argument::R0 | Argument::R1, Argument::R0 | Argument::R1) => {
-                        asm.push_str(format!("    add {}, {}\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Small), arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Small)).as_str())
-                    },
+                        asm.push_str(format!("    add {}, {}\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Small), arg_to_asm_string(statement.arg2.unwrap(), ArgSize::Small)).as_str())
+                    }
                     (Argument::R0 | Argument::R1, Argument::Stack) => {
                         asm.push_str(format!("    add {}, [rsp]\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Small)).as_str())
                     }
@@ -260,7 +260,7 @@ impl Compiler {
             }
         }
 
-        asm.push_str("    mov rax, 60\n    mov rdi, 1\n    syscall\n");
+        asm.push_str("    mov rax, 60\n    mov rdi, 0\n    syscall\n");
 
         asm
     }
