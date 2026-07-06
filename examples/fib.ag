@@ -1,0 +1,32 @@
+$ this program prints fibonacci numbers up to 144 (the max for an unsigned 8bit integer) $
+$ the first part of this program puts 13 values in the stack to make the fibonacci loop run 13 times $
+$ there arent other ways to do this because of the 2 register limitation $
+
+1011>'; $ counter $
+0>:; $ put 0 in the stack (marks end of the actual fibonacci loop) $
+0>:; $ this will get deleted at the start of the first iteration of this loop $
+[
+    :!; $ pop the first value from the stack $
+    1>:; $ put 1 in the stack $
+    '-1; $ remove 1 from the counter $
+    '>:; $ push the counter in the stack (when it gets to zero, the loop will stop) $
+];
+:!; $ pop a value from the stack; that would have been a zero, since its the last value of the counter that gets pushed before the loop stops $
+
+$ actual fibonacci logic $
+0>'; $ F(0) $
+1>''; $ F(1) $
+$ print F(0) and F(1) $
+'>\#;
+1010>\; $ newline $
+''>\#;
+1010>\; $ newline $
+[ $ fibonacci loop $
+    ''>:; $ put the current number in the stack $
+    ''+'; $ sum current and previous number to the current number register $
+    :>'; $ put the previous number (the old current number) in the previous number register $
+    :!; $ pop it from the stack $
+    ''>\#; $ print the current number $
+    1010>\; $ newline $
+    :!; $ pop one of the counter 1's from the stack $
+]
