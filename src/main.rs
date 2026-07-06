@@ -66,6 +66,10 @@ fn main() {
             output,
             keep_asm,
         } => {
+            if std::env::consts::OS != "linux" || std::env::consts::ARCH != "x86_64" {
+                eprintln!("\x1b[1;31mCurrently, the compiler only supports x86-64 Linux, but the detected setup is {} {}", std::env::consts::ARCH, std::env::consts::OS);
+                std::process::exit(1);
+            }
             let src = match fs::read_to_string(file) {
                 Ok(src) => src,
                 Err(e) => {
