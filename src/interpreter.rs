@@ -1,8 +1,8 @@
 use std::io;
 use std::io::Write;
 
-use crate::error::{SyntaxError, error};
 use crate::parser::{Statement, StatementTypes, Argument, LoopState};
+use crate::error::{SyntaxError, error, RuntimeError};
 
 pub struct Interpreter {
     r0: u8,
@@ -164,7 +164,7 @@ impl Interpreter {
 
             if (statement.loop_state == Some(LoopState::End)
                 || statement.loop_state == Some(LoopState::Both))
-                && *self.stack.last().unwrap() != 0
+                && (self.stack.last() != Some(&0) || self.stack.len() == 0)
             {
                 self.instruction_pointer = *self.loops.last().unwrap()
             } else if statement.loop_state == Some(LoopState::End)
@@ -183,7 +183,18 @@ impl Interpreter {
             Argument::Literal(v) => v,
             Argument::R0 => self.r0,
             Argument::R1 => self.r1,
-            Argument::Stack => *self.stack.last().unwrap(),
+            Argument::Stack => {
+                if self.stack.len() > 0 {
+                    *self.stack.last().unwrap()
+                } else {
+                    error(
+                        Box::new(RuntimeError::EmptyStackRead),
+                        self.instruction_pointer,
+                        "Tried to access stack, but stack is empty.",
+                    );
+                    0
+                }
+            }
             _ => {
                 error(
                     Box::new(SyntaxError::InvalidSource),
