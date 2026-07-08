@@ -1,5 +1,5 @@
 use crate::error::{SyntaxError, error};
-use crate::parser::{Argument, LoopState, Statement, StatementTypes};
+use crate::parser::{Argument, Statement, StatementTypes};
 
 pub struct Compiler {
     loop_count: u32,
@@ -46,15 +46,15 @@ impl Compiler {
         asm.push_str(".section .text\nmain:\n    xor r12, r12\n    xor r13, r13\n");
 
         for (statement_index, statement) in statements.iter().enumerate() {
-            if statement.loop_state == Some(LoopState::Start)
-                || statement.loop_state == Some(LoopState::Both)
-            {
-                self.loop_count += 1;
-                self.active_loops.push(self.loop_count - 1);
-                asm.push_str(format!("    .l{}:\n", self.loop_count - 1).as_str());
-            }
-
             match statement.statement_type {
+                StatementTypes::LoopStart => {
+                    self.loop_count += 1;
+                    self.active_loops.push(self.loop_count - 1);
+                    asm.push_str(format!("    .l{}:\n", self.loop_count - 1).as_str());
+                }
+                StatementTypes::LoopEnd => {
+                    asm.push_str(format!("    cmp byte ptr [rsp], 0\n    jnz .l{}\n", self.active_loops.last().unwrap()).as_str())
+                }
                 StatementTypes::Copy => match (statement.arg1.unwrap(), statement.arg2.unwrap()) {
                     (Argument::Literal(val), Argument::R0 | Argument::R1) => {
                         asm.push_str(
@@ -237,26 +237,11 @@ impl Compiler {
                         );
                     }
                 }
-                StatementTypes::None
-                if statement.loop_state == Some(LoopState::End)
-                    || statement.loop_state == Some(LoopState::Both) => {}
                 _ => error(
                     Box::new(SyntaxError::InvalidStatement),
                     statement_index as u32,
                     "Invalid statement provided.",
                 ),
-            }
-
-            if statement.loop_state == Some(LoopState::End)
-                || statement.loop_state == Some(LoopState::Both)
-            {
-                asm.push_str(
-                    format!(
-                        "    cmp byte ptr [rsp], 0\n    jnz .l{}\n",
-                        self.active_loops.last().unwrap()
-                    )
-                    .as_str(),
-                );
             }
         }
 

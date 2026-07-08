@@ -13,19 +13,14 @@ pub enum StatementTypes {
     Multiply,
     Divide,
     Remainder,
+    LoopStart,
+    LoopEnd
 }
 
 const VALID_TOKENS: [char; 18] = [
     ';', '0', '1', '[', ']', '\'', '"', ':', '\\', '#', '|', '>', '!', '+', '-', '*', '/', '%',
 ];
-const STATEMENT_TOKENS: [char; 8] = ['|', '>', '!', '+', '-', '*', '/', '%'];
-
-#[derive(PartialEq, Copy, Clone, Debug)]
-pub enum LoopState {
-    Start,
-    End,
-    Both,
-}
+const STATEMENT_TOKENS: [char; 10] = ['|', '>', '!', '+', '-', '*', '/', '%', '[', ']'];
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Argument {
@@ -47,7 +42,6 @@ pub struct Statement {
     pub statement_type: StatementTypes,
     pub arg1: Option<Argument>,
     pub arg2: Option<Argument>,
-    pub loop_state: Option<LoopState>,
 }
 impl Statement {
     fn new() -> Self {
@@ -55,7 +49,6 @@ impl Statement {
             statement_type: StatementTypes::None,
             arg1: None,
             arg2: None,
-            loop_state: None,
         }
     }
 }
@@ -69,6 +62,7 @@ pub fn parse_source(src: String) -> Vec<Statement> {
     let raw_statements: Vec<&str> = filtered_src
         .trim()
         .split(';')
+        .flat_map(|s| s.split_inclusive(['[', ']']))
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
         .collect();
@@ -85,14 +79,6 @@ pub fn parse_source(src: String) -> Vec<Statement> {
 fn parse_statement(statement: &str, statement_index: u32) -> Statement {
     let mut statement_struct = Statement::new();
 
-    if statement.starts_with('[') && statement.ends_with(']') {
-        statement_struct.loop_state = Some(LoopState::Both)
-    } else if statement.starts_with('[') {
-        statement_struct.loop_state = Some(LoopState::Start)
-    } else if statement.ends_with(']') {
-        statement_struct.loop_state = Some(LoopState::End)
-    }
-
     let raw_args: Vec<&str> = statement.split(STATEMENT_TOKENS).collect();
 
     if raw_args.len() > 2 {
@@ -105,13 +91,39 @@ fn parse_statement(statement: &str, statement_index: u32) -> Statement {
 
     let mut args: Vec<Argument> = Vec::new();
     for raw_arg in &raw_args {
-        let filtered_arg = raw_arg.trim().replace(['[', ']'], "");
+        let filtered_arg = raw_arg.trim();
         if !filtered_arg.is_empty() {
-            args.push(parse_argument(filtered_arg.as_str(), statement_index).unwrap())
+            args.push(parse_argument(filtered_arg, statement_index).unwrap())
         }
     }
 
-    if statement.contains("|") {
+    if statement.contains("[") {
+        if args.len() != 0 {
+            error(
+                Box::new(SyntaxError::InvalidArguments),
+                statement_index,
+                format!(
+                    "{:?} requires 0 arguments, {} supplied",
+                    StatementTypes::LoopStart,
+                    args.len()
+                ),
+            );
+        }
+        statement_struct.statement_type = StatementTypes::LoopStart;
+    } else if statement.contains("]") {
+        if args.len() != 0 {
+            error(
+                Box::new(SyntaxError::InvalidArguments),
+                statement_index,
+                format!(
+                    "{:?} requires 0 arguments, {} supplied",
+                    StatementTypes::LoopEnd,
+                    args.len()
+                ),
+            );
+        }
+        statement_struct.statement_type = StatementTypes::LoopEnd;
+    } else if statement.contains("|") {
         if args.len() != 0 {
             error(
                 Box::new(SyntaxError::InvalidArguments),

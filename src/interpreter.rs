@@ -2,7 +2,7 @@ use std::io;
 use std::io::Write;
 
 use crate::error::{SyntaxError, error, RuntimeError};
-use crate::parser::{Argument, LoopState, Statement, StatementTypes};
+use crate::parser::{Argument, Statement, StatementTypes};
 
 pub struct Interpreter {
     r0: u8,
@@ -27,14 +27,19 @@ impl Interpreter {
         while self.instruction_pointer < statements.len() as u32 {
             let statement = statements[self.instruction_pointer as usize];
 
-            if (statement.loop_state == Some(LoopState::Start)
-                || statement.loop_state == Some(LoopState::Both))
-                && !self.loops.contains(&self.instruction_pointer)
-            {
-                self.loops.push(self.instruction_pointer);
-            }
-
             match statement.statement_type {
+                StatementTypes::LoopStart => {
+                    if !self.loops.contains(&self.instruction_pointer) {
+                        self.loops.push(self.instruction_pointer);
+                    }
+                }
+                StatementTypes::LoopEnd => {
+                    if self.stack.last() != Some(&0) || self.stack.len() == 0 {
+                        self.instruction_pointer = *self.loops.last().unwrap()
+                    } else if *self.stack.last().unwrap() == 0 {
+                        self.loops.pop();
+                    }
+                }
                 StatementTypes::Copy => {
                     let value = self.get_argument_value(statement.arg1.unwrap());
                     match statement.arg2.unwrap() {
@@ -180,30 +185,18 @@ impl Interpreter {
                         }
                     }
                 }
-                StatementTypes::None
+                /*StatementTypes::None
                     if statement.loop_state == Some(LoopState::End)
                         || statement.loop_state == Some(LoopState::Start)
-                        || statement.loop_state == Some(LoopState::Both) => {}
+                        || statement.loop_state == Some(LoopState::Both) => {}*/
                 _ => error(
                     Box::new(SyntaxError::InvalidStatement),
                     self.instruction_pointer,
                     "Invalid statement provided.",
                 ),
             }
-
-            if (statement.loop_state == Some(LoopState::End)
-                || statement.loop_state == Some(LoopState::Both))
-                && (self.stack.last() != Some(&0) || self.stack.len() == 0)
-            {
-                self.instruction_pointer = *self.loops.last().unwrap()
-            } else if statement.loop_state == Some(LoopState::End)
-                || statement.loop_state == Some(LoopState::Both) && *self.stack.last().unwrap() == 0
-            {
-                self.loops.pop();
-                self.instruction_pointer += 1;
-            } else {
-                self.instruction_pointer += 1;
-            }
+            
+            self.instruction_pointer += 1;
         }
     }
 
