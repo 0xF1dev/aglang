@@ -1,8 +1,8 @@
-$ this program prints fibonacci numbers up to 144 (the max for an unsigned 8bit integer) $
+$ this program prints fibonacci numbers up to 233 (the max for an unsigned 8bit integer) $
 $ the first part of this program puts 13 values in the stack to make the fibonacci loop run 13 times $
 $ there arent other ways to do this because of the 2 register limitation $
 
-1011>'; $ counter $
+1100>'; $ counter $
 0>:; $ put 0 in the stack (marks end of the actual fibonacci loop) $
 0>:; $ this will get deleted at the start of the first iteration of this loop $
 [
