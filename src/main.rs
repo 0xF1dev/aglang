@@ -5,6 +5,7 @@ use std::error::Error;
 use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
+use std::io::ErrorKind::NotFound;
 use std::io::Write;
 use std::path::Path;
 use std::process::Command;
@@ -42,7 +43,23 @@ enum Commands {
         /// Keep the output assembly instead of deleting it
         #[arg(long)]
         keep_asm: bool,
+
+        /// Keep the output object file instead of deleting it
+        #[arg(long)]
+        keep_obj: bool,
     },
+}
+
+#[derive(Debug)]
+enum CompilePhase {
+    Assembler,
+    Linker
+}
+
+struct CompileError {
+    phase: CompilePhase,
+    code: i32,
+    output: Vec<u8>,
 }
 
 fn main() {
@@ -65,9 +82,14 @@ fn main() {
             file,
             output,
             keep_asm,
+            keep_obj
         } => {
             if std::env::consts::OS != "linux" || std::env::consts::ARCH != "x86_64" {
-                eprintln!("\x1b[1;31mCurrently, the compiler only supports x86-64 Linux, but the detected setup is {} {}", std::env::consts::ARCH, std::env::consts::OS);
+                eprintln!(
+                    "\x1b[1;31mCurrently, the compiler only supports x86-64 Linux, but the detected setup is {} {}",
+                    std::env::consts::ARCH,
+                    std::env::consts::OS
+                );
                 std::process::exit(1);
             }
             let src = match fs::read_to_string(file) {
@@ -86,24 +108,35 @@ fn main() {
                 .to_str()
                 .unwrap();
             match write_asm_to_file(format!("{basename}.s"), asm) {
-                Ok(()) => println!("\x1b[0;32mWritten assembly file successfully."),
+                Ok(()) => println!("\x1b[0;32mAssembly file written."),
                 Err(e) => {
                     eprintln!("\x1b[1;31mCould not write assembly file: {e}");
                     std::process::exit(1);
                 }
             };
-            match compile_asm(format!("{basename}.s"), output.clone()) {
+            match compile_asm(
+                format!("{basename}.s"),
+                format!("{basename}.o"),
+                output.clone(),
+            ) {
                 Ok(()) => {
-                    println!("\x1b[0;32mCompiled assembly file with gcc successfully.")
+                    println!("\x1b[0;32mProgram compiled successfully.")
                 }
                 Err(e) => {
                     eprintln!(
-                        "\x1b[1;31mCould not compile assembly file with gcc (is it installed?): {e}"
+                        "\x1b[1;31mCould not compile assembly file (phase: {:?}, error code: {}): {}",
+                        e.phase,
+                        e.code,
+                        String::from_utf8(e.output)
+                            .unwrap_or("INVALID UTF8 OUTPUT FROM BUILD COMMAND".to_string())
                     );
                 }
             }
             if !keep_asm {
                 fs::remove_file(format!("{basename}.s")).unwrap();
+            }
+            if !keep_obj {
+                fs::remove_file(format!("{basename}.o")).unwrap();
             }
         }
     };
@@ -115,12 +148,48 @@ fn write_asm_to_file(filename: String, source: String) -> Result<(), Box<dyn Err
     Ok(())
 }
 
-fn compile_asm(asm_file: String, output: String) -> Result<(), Box<dyn Error>> {
-    Command::new("gcc")
+fn compile_asm(asm_file: String, obj_file: String, output: String) -> Result<(), CompileError> {
+    let cmd_output = match Command::new("as")
         .arg(asm_file)
         .arg("-o")
+        .arg(obj_file.clone())
+        .output() {
+        Ok(o) => o,
+        Err(e) if e.kind() == NotFound => {
+            eprintln!("\x1b[1;31mCommand \"as\" not found. Is GCC installed?");
+            std::process::exit(1)
+        }
+        Err(e) => {
+            eprintln!("\x1b[1;31mCould not run \"as\" command: {e}");
+            std::process::exit(1)
+        }
+    };
+
+    if !cmd_output.status.success() {
+        return Err(CompileError{ phase: CompilePhase::Assembler, code: cmd_output.status.code().unwrap_or(1), output: cmd_output.stderr })
+    }
+
+    let cmd_output = match Command::new("ld")
+        .arg("-s")
+        .arg("-n")
+        .arg(obj_file.clone())
+        .arg("-o")
         .arg(output)
-        .output()?;
+        .output() {
+        Ok(o) => o,
+        Err(e) if e.kind() == NotFound => {
+            eprintln!("\x1b[1;31mCommand \"ld\" not found. Is it installed?");
+            std::process::exit(1)
+        }
+        Err(e) => {
+            eprintln!("\x1b[1;31mCould not run \"ld\" command: {e}");
+            std::process::exit(1)
+        }
+    };
+
+    if !cmd_output.status.success() {
+        return Err(CompileError{ phase: CompilePhase::Linker, code: cmd_output.status.code().unwrap_or(1), output: cmd_output.stderr })
+    }
 
     Ok(())
 }
