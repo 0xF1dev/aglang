@@ -1,4 +1,5 @@
 # Aglang
+![Aglang logo](./assets/aglang-logo.avif)
 
 Aglang is a **stack-based, esoteric language** made to be simple, _like Assembly_.
 
