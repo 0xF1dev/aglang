@@ -21,7 +21,7 @@ impl Compiler {
     }
 
     pub fn compile_to_asm(&mut self, statements: Vec<Statement>) -> String {
-        let mut asm = String::from(".intel_syntax noprefix\n.global main\n\n");
+        let mut asm = String::from(".intel_syntax noprefix\n.global _start\n\n");
 
         if statements
             .iter()
@@ -43,7 +43,7 @@ impl Compiler {
             asm.push_str(".section .bss\n.lcomm decimal_buf, 3\n\n");
         }
 
-        asm.push_str(".section .text\nmain:\n    xor r12, r12\n    xor r13, r13\n");
+        asm.push_str(".section .text\n_start:\n    xor r12, r12\n    xor r13, r13\n");
 
         for (statement_index, statement) in statements.iter().enumerate() {
             match statement.statement_type {
