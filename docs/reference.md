@@ -94,6 +94,12 @@ So, for example, if the user inputs `Hello`, the stack would look like this:
 
 ![Visual representation of the stack after user input](../assets/input.png)
 
+## Loops
+
+In Aglang, loops are enclosed in square brackets (`[]`), and loop through the code in them until, at the end of an iteration, the **top value** in the stack is `0`.
+
+For example, after asking the user for input, a loop can be written to do something with the top character in the stack, pop it and reiterate the loop: since the input automatically ends with a `0`, the loop will automatically end when it is reached.
+
 ---
 
 **You're set! Now that you've learned the basics, go write some Aglang!**
