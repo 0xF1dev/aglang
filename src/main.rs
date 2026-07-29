@@ -194,6 +194,7 @@ fn main() {
                     "Object file removed!\x1b[0m".into(),
                 );
             }
+            println!("\x1b[1;92mBuild completed!\n\x1b[0;mThe output executable is in \x1b[1mbuild/fib")
         }
     };
 }
