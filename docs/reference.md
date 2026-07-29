@@ -37,7 +37,7 @@ and any text wrapped between two `$` symbols are comments and should be ignored,
 
 ## Operators
 
-There are 8 operators in Aglang, of which 5 are for arithmetic operations.
+There are 13 operators in Aglang, of which 5 are for arithmetic operations.
 
 Below is a table of each operator, its statement structure and a description of what it does.
 
@@ -51,6 +51,11 @@ Below is a table of each operator, its statement structure and a description of 
 |   `*`    | Multiplication | `[dest]*[src];` | Multiplies the two arguments and puts the result in `[dest]`. If the result is greater than 255, the result wraps to 0.              |
 |   `/`    | Division       | `[dest]/[src];` | Divides the `[dest]` argument by `[src]` and puts the quotient in `[dest]`.                                                          |
 |   `%`    | Remainder      | `[dest]%[src];` | Divides `[dest]` by `[src]` and puts the remainder of the operation in `[dest]`.                                                     |
+|   `~`    | Label          | `~[label]`      | Used to declare a label. A label can only be named using **dots** (e.g. ".", "..")                                                   |
+|   `?`    | Compare        | `[src]?[dest]`  | Compares `[src]` to `[dest]`. Can either result in `Greater`, `Less` or `Equal`                                                      |
+|   `^`    | Greater        | `^[label]`      | Needs to be preceded by a `Compare` statement. If the result of the comparison is `Greater`, the program will jump to `[label]`.     |
+|   `<`    | Less           | `<[label]`      | Needs to be preceded by a `Compare` statement. If the result of the comparison is `Less`, the program will jump to `[label]`.        |
+|   `=`    | Equal          | `=[label]`      | Needs to be preceded by a `Compare` statement. If the result of the comparison is `Equal`, the program will jump to `[label]`.       |
 
 
 ## Memory
@@ -99,6 +104,21 @@ So, for example, if the user inputs `Hello`, the stack would look like this:
 In Aglang, loops are enclosed in square brackets (`[]`), and loop through the code in them until, at the end of an iteration, the **top value** in the stack is `0`.
 
 For example, after asking the user for input, a loop can be written to do something with the top character in the stack, pop it and reiterate the loop: since the input automatically ends with a `0`, the loop will automatically end when it is reached.
+
+## Labels
+
+Labels define **points** in code. They can only be named with _dots_ (e.g. ".."), and they are declared with a _label_ statement (`~`).
+
+To jump to a label, a _compare_ statement can be used followed by a _greater_, _less_ or _equal_ statement. Labels can be declared **before** or **after** a jumping statement.
+
+For example:
+```
+~.; $ declare label "." $
+(...)
+
+10?1; $ compare binary literals 10 (2 in decimal) and 1 (1 in decimal) $
+^.; $ since 2 is greater than 1, the program will jump back to label "." $
+```
 
 ---
 
