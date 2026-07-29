@@ -3,12 +3,10 @@ use compiler::{Compiler, Target};
 use interpreter::Interpreter;
 use spinners::{Spinner, Spinners};
 use std::error::Error;
-use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
 use std::io::ErrorKind::NotFound;
 use std::io::Write;
-use std::path::Path;
 use std::process::Command;
 
 pub mod compiler;
@@ -100,17 +98,6 @@ fn main() {
                 );
                 std::process::exit(1);
             }
-            let src = match fs::read_to_string(file) {
-                Ok(src) => src,
-                Err(e) => {
-                    eprintln!("\x1b[1;31mCould not open source file: {e}");
-                    std::process::exit(1);
-                }
-            };
-            let mut spinner =
-                Spinner::with_timer(Spinners::Dots, "Compiling code into assembly...".into());
-            let statements = parser::parse_source(src);
-            let mut compiler = Compiler::new();
             let target = match target {
                 Some(t) => *t,
                 None => {
@@ -128,6 +115,20 @@ fn main() {
                     }
                 }
             };
+            let keep_asm_str = if *keep_asm { "Yes" } else { "No" };
+            let keep_obj_str = if *keep_obj { "Yes" } else { "No" };
+            println!("\x1b[1mBuild info:\x1b[0m\n    - Target platform: {target:?} (x86_64)\n    - Keep ASM: {keep_asm_str} ({output}.s)\n    - Keep OBJ: {keep_obj_str} ({output}.o)");
+            let src = match fs::read_to_string(file) {
+                Ok(src) => src,
+                Err(e) => {
+                    eprintln!("\x1b[1;31mCould not open source file: {e}");
+                    std::process::exit(1);
+                }
+            };
+            let mut spinner =
+                Spinner::with_timer(Spinners::Dots, "Compiling code into assembly...".into());
+            let statements = parser::parse_source(src);
+            let mut compiler = Compiler::new();
             let asm = match compiler.compile_to_asm(statements, target) {
                 Ok(s) => s,
                 Err(e) => {
@@ -138,12 +139,7 @@ fn main() {
                     std::process::exit(1);
                 }
             };
-            let basename = Path::new(output)
-                .file_stem()
-                .unwrap_or(OsStr::new("aglang_program"))
-                .to_str()
-                .unwrap();
-            match write_asm_to_file(format!("{basename}.s"), asm) {
+            match write_asm_to_file(format!("{output}.s"), asm) {
                 Ok(()) => {
                     spinner.stop_and_persist("\x1b[0;32m🗸", "Assembly generated!\x1b[0m".into())
                 }
@@ -157,8 +153,8 @@ fn main() {
             };
             let mut spinner = Spinner::with_timer(Spinners::Dots, "Compiling assembly into executable...".into());
             match compile_asm(
-                format!("{basename}.s"),
-                format!("{basename}.o"),
+                format!("{output}.s"),
+                format!("{output}.o"),
                 output.clone(),
                 target,
             ) {
@@ -184,7 +180,7 @@ fn main() {
             }
             if !keep_asm {
                 let mut spinner = Spinner::with_timer(Spinners::Dots, "Removing assembly file...".into());
-                fs::remove_file(format!("{basename}.s")).unwrap();
+                fs::remove_file(format!("{output}.s")).unwrap();
                 spinner.stop_and_persist(
                     "\x1b[0;32m🗸",
                     "Assembly file removed!\x1b[0m".into(),
@@ -192,7 +188,7 @@ fn main() {
             }
             if !keep_obj {
                 let mut spinner = Spinner::with_timer(Spinners::Dots, "Removing object file...".into());
-                fs::remove_file(format!("{basename}.o")).unwrap();
+                fs::remove_file(format!("{output}.o")).unwrap();
                 spinner.stop_and_persist(
                     "\x1b[0;32m🗸",
                     "Object file removed!\x1b[0m".into(),

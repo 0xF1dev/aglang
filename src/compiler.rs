@@ -3,7 +3,7 @@ use crate::parser::{Argument, Statement, StatementTypes};
 use std::cmp::PartialEq;
 use clap::ValueEnum;
 
-#[derive(PartialEq, Clone, Copy, ValueEnum)]
+#[derive(PartialEq, Clone, Copy, ValueEnum, Debug)]
 pub enum Target {
     Linux,
     Windows,
