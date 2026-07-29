@@ -130,6 +130,7 @@ fn main() {
                         String::from_utf8(e.output)
                             .unwrap_or("INVALID UTF8 OUTPUT FROM BUILD COMMAND".to_string())
                     );
+                    std::process::exit(1);
                 }
             }
             if !keep_asm {
