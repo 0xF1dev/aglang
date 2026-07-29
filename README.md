@@ -1,4 +1,5 @@
 # Aglang
+
 ![Aglang logo](./assets/aglang-logo.avif)
 
 Aglang is a **stack-based, esoteric language** made to be simple, _like Assembly_.
@@ -22,9 +23,11 @@ With these, almost **anything is possible!** In the `examples/` directory, you c
 ## Usage
 
 First, clone this repository (`git clone https://github.com/0xF1dev/aglang.git && cd aglang`) and install the CLI with:
+
 ```shell
 cargo install --path .
 ```
+
 or use the precompiled executable in the Releases tab.
 
 ---
@@ -32,15 +35,19 @@ or use the precompiled executable in the Releases tab.
 The CLI has two commands, `run` and `build`. Here's how you can use them:
 
 ### Run with the interpreter
+
 ```shell
 aglang run <FILE>
 ```
 
 ### Build into an executable
+
 ```shell
 aglang build <FILE> -o <OUTPUT>
 ```
-_(note: compilation currently only supports x86-64 Linux; if your machine isn't supported, the compiler will give you an error)_
+
+_(note: compilation currently only supports x86-64 Linux; if your machine isn't supported, the compiler will give you an
+error)_
 
 _(note 2: to build a file, you need to have GCC installed)_
 
@@ -65,3 +72,8 @@ The following table contains all the valid tokens and their use.
 |     `%`     | **Remainder**           | The **Remainder** operator is used to get the remainder of the division of the 2 arguments. The result gets stored in the first argument.                                                                                                                  |
 |     `\`     | **StdOut**              | The **StdOut** can be used as the destination of a _copy_ operation to print the ASCII character of the source to the terminal. When a `#` character is appended to it (`\#`), the value gets printed as its decimal value instead of the ASCII character. |
 | `[` and `]` | **Loop**                | A **Loop** runs until, at the end of it, the top value in the stack is `0`.                                                                                                                                                                                |
+|     `~`     | **Label**               | A **Label** is a point in the code, and it can only be named using **dots** (e.g. ".", "..")                                                                                                                                                               |
+|     `?`     | **Compare**             | The **Compare** operator compares the first value to the second. Can either result in `Greater`, `Less` or `Equal`                                                                                                                                         |
+|     `^`     | **Greater**             | Needs to be preceded by a `Compare` statement. If the result of the comparison is `Greater`, the program will jump to `[label]`.                                                                                                                           |
+|     `<`     | **Less**                | Needs to be preceded by a `Compare` statement. If the result of the comparison is `Less`, the program will jump to `[label]`.                                                                                                                              |
+|     `=`     | **Equal**               | Needs to be preceded by a `Compare` statement. If the result of the comparison is `Equal`, the program will jump to `[label]`.                                                                                                                             |
