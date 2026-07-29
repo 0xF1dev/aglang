@@ -32,6 +32,11 @@ The following are all the valid tokens currently in Aglang:
 - `*`
 - `/`
 - `%`
+- `~`
+- `?`
+- `^`
+- `<`
+- `=`
 
 and any text wrapped between two `$` symbols are comments and should be ignored, like any other character not contained in the list above.
 
