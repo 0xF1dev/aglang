@@ -89,7 +89,7 @@ impl Interpreter {
                         Box::new(SyntaxError::InvalidStatement),
                         self.instruction_pointer,
                         format!(
-                            "statement {:?} has to be preceded by a {:?} statement.",
+                            "Statement {:?} has to be preceded by a {:?} statement.",
                             statement.statement_type,
                             StatementTypes::Compare
                         ),
