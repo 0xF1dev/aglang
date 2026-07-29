@@ -122,7 +122,17 @@ impl Interpreter {
                     }
                 }
                 StatementTypes::Greater => {
-                    let label_index = self.get_argument_value(statement.arg2.unwrap());
+                    let label_index = match statement.arg2.unwrap() {
+                        Argument::Label { index: i } => i,
+                        a => {
+                            error(
+                                Box::new(SyntaxError::InvalidArguments),
+                                self.instruction_pointer,
+                                format!("Cannot use argument {:?} as label reference.", a),
+                            );
+                            0
+                        }
+                    };
                     let label = self.labels.iter().find(|l| l.index == label_index);
                     if label.is_none() {
                         error(
@@ -136,7 +146,17 @@ impl Interpreter {
                     }
                 }
                 StatementTypes::Less => {
-                    let label_index = self.get_argument_value(statement.arg2.unwrap());
+                    let label_index = match statement.arg2.unwrap() {
+                        Argument::Label { index: i } => i,
+                        a => {
+                            error(
+                                Box::new(SyntaxError::InvalidArguments),
+                                self.instruction_pointer,
+                                format!("Cannot use argument {:?} as label reference.", a),
+                            );
+                            0
+                        }
+                    };
                     let label = self.labels.iter().find(|l| l.index == label_index);
                     if label.is_none() {
                         error(
@@ -150,7 +170,17 @@ impl Interpreter {
                     }
                 }
                 StatementTypes::Equal => {
-                    let label_index = self.get_argument_value(statement.arg2.unwrap());
+                    let label_index = match statement.arg2.unwrap() {
+                        Argument::Label { index: i } => i,
+                        a => {
+                            error(
+                                Box::new(SyntaxError::InvalidArguments),
+                                self.instruction_pointer,
+                                format!("Cannot use argument {:?} as label reference.", a),
+                            );
+                            0
+                        }
+                    };
                     let label = self.labels.iter().find(|l| l.index == label_index);
                     if label.is_none() {
                         error(
@@ -337,7 +367,6 @@ impl Interpreter {
                     0
                 }
             }
-            Argument::Label { index: i } => i,
             _ => {
                 error(
                     Box::new(SyntaxError::InvalidSource),
