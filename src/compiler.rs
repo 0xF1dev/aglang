@@ -55,6 +55,125 @@ impl Compiler {
                 StatementTypes::LoopEnd => {
                     asm.push_str(format!("    cmp byte ptr [rsp], 0\n    jnz .l{}\n", self.active_loops.last().unwrap()).as_str())
                 }
+                StatementTypes::Label => {
+                    let index = match statement.arg2.unwrap() {
+                        Argument::Label { index: i } => i,
+                        _ => {
+                            error(
+                                Box::new(SyntaxError::InvalidArguments),
+                                statement_index as u32,
+                                format!(
+                                    "Cannot use argument of type {} as label definition.",
+                                    statement.arg2.unwrap()
+                                ),
+                            );
+                            0
+                        }
+                    };
+                    asm.push_str(format!("    .label{index}:\n").as_str())
+                }
+                StatementTypes::Compare => match (statement.arg1.unwrap(), statement.arg2.unwrap()) {
+                    (Argument::Literal(val0), Argument::Literal(val1)) => {
+                        asm.push_str(format!("    mov r14, {val0}\n    cmp r14, {val1}\n").as_str())
+                    }
+                    (Argument::Literal(val), Argument::R0 | Argument::R1) => {
+                        asm.push_str(
+                            format!(
+                                "    mov r14, {val}\n    cmp r14, {}\n",
+                                arg_to_asm_string(statement.arg2.unwrap(), ArgSize::Small)
+                            )
+                                .as_str(),
+                        );
+                    }
+                    (Argument::R0 | Argument::R1, Argument::Literal(val)) => {
+                        asm.push_str(
+                            format!(
+                                "    cmp {}, {val}\n",
+                                arg_to_asm_string(statement.arg2.unwrap(), ArgSize::Small)
+                            )
+                                .as_str(),
+                        );
+                    }
+                    (Argument::Literal(val), Argument::Stack) => {
+                        asm.push_str(format!("    mov r14, {val}\n    cmp r14, [rsp]\n").as_str());
+                    }
+                    (Argument::Stack, Argument::Literal(val)) => {
+                        asm.push_str(format!("    cmp [rsp], {val}\n").as_str());
+                    }
+                    (Argument::Stack, Argument::R0 | Argument::R1) => {
+                        asm.push_str(format!("    cmp [rsp], {}\n", arg_to_asm_string(statement.arg2.unwrap(), ArgSize::Full)).as_str())
+                    }
+                    (Argument::R0 | Argument::R1, Argument::Stack) => {
+                        asm.push_str(format!("    cmp {}, [rsp]\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full)).as_str())
+                    }
+                    (Argument::Stack, Argument::Stack) => {
+                        asm.push_str("    cmp [rsp], [rsp]\n")
+                    }
+                    (Argument::R0 | Argument::R1, Argument::R0 | Argument::R1) => {
+                        asm.push_str(format!("    cmp {}, {}\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full), arg_to_asm_string(statement.arg2.unwrap(), ArgSize::Full)).as_str())
+                    }
+                    _ => {
+                        error(
+                            Box::new(SyntaxError::InvalidArguments),
+                            statement_index as u32,
+                            format!(
+                                "Invalid arguments supplied for {:?}",
+                                StatementTypes::Compare
+                            ),
+                        );
+                    }
+                }
+                StatementTypes::Greater => {
+                    let index = match statement.arg2.unwrap() {
+                        Argument::Label { index: i } => i,
+                        _ => {
+                            error(
+                                Box::new(SyntaxError::InvalidArguments),
+                                statement_index as u32,
+                                format!(
+                                    "Cannot use argument of type {} as label reference.",
+                                    statement.arg2.unwrap()
+                                ),
+                            );
+                            0
+                        }
+                    };
+                    asm.push_str(format!("    jg .label{index}\n").as_str())
+                }
+                StatementTypes::Less => {
+                    let index = match statement.arg2.unwrap() {
+                        Argument::Label { index: i } => i,
+                        _ => {
+                            error(
+                                Box::new(SyntaxError::InvalidArguments),
+                                statement_index as u32,
+                                format!(
+                                    "Cannot use argument of type {} as label reference.",
+                                    statement.arg2.unwrap()
+                                ),
+                            );
+                            0
+                        }
+                    };
+                    asm.push_str(format!("    jl .label{index}\n").as_str())
+                }
+                StatementTypes::Equal => {
+                    let index = match statement.arg2.unwrap() {
+                        Argument::Label { index: i } => i,
+                        _ => {
+                            error(
+                                Box::new(SyntaxError::InvalidArguments),
+                                statement_index as u32,
+                                format!(
+                                    "Cannot use argument of type {} as label reference.",
+                                    statement.arg2.unwrap()
+                                ),
+                            );
+                            0
+                        }
+                    };
+                    asm.push_str(format!("    je .label{index}\n").as_str())
+                }
                 StatementTypes::Copy => match (statement.arg1.unwrap(), statement.arg2.unwrap()) {
                     (Argument::Literal(val), Argument::R0 | Argument::R1) => {
                         asm.push_str(

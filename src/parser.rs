@@ -14,13 +14,18 @@ pub enum StatementTypes {
     Divide,
     Remainder,
     LoopStart,
-    LoopEnd
+    LoopEnd,
+    Label,
+    Compare,
+    Equal,
+    Greater,
+    Less
 }
 
-const VALID_TOKENS: [char; 18] = [
-    ';', '0', '1', '[', ']', '\'', '"', ':', '\\', '#', '|', '>', '!', '+', '-', '*', '/', '%',
+const VALID_TOKENS: [char; 24] = [
+    ';', '0', '1', '[', ']', '\'', '"', ':', '\\', '#', '|', '>', '!', '+', '-', '*', '/', '%', '~', '.', '?', '^', '<', '=',
 ];
-const STATEMENT_TOKENS: [char; 10] = ['|', '>', '!', '+', '-', '*', '/', '%', '[', ']'];
+const STATEMENT_TOKENS: [char; 15] = ['|', '>', '!', '+', '-', '*', '/', '%', '[', ']', '~', '?', '^', '<', '='];
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Argument {
@@ -29,6 +34,7 @@ pub enum Argument {
     R1,
     Stack,
     StdOut { as_number: bool },
+    Label { index: u8 },
 }
 
 impl fmt::Display for Argument {
@@ -240,6 +246,77 @@ fn parse_statement(statement: &str, statement_index: u32) -> Statement {
         statement_struct.statement_type = StatementTypes::Remainder;
         statement_struct.arg1 = Some(args[0]);
         statement_struct.arg2 = Some(args[1]);
+    } else if statement.contains("~") {
+        if args.len() != 1 {
+            error(
+                Box::new(SyntaxError::InvalidArguments),
+                statement_index,
+                format!(
+                    "{:?} requires 1 argument, {} supplied",
+                    StatementTypes::Label,
+                    args.len()
+                ),
+            )
+        }
+        statement_struct.statement_type = StatementTypes::Label;
+        statement_struct.arg2 = Some(args[0]);
+    } else if statement.contains("?") {
+        if args.len() != 2 {
+            error(
+                Box::new(SyntaxError::InvalidArguments),
+                statement_index,
+                format!(
+                    "{:?} requires 1 argument, {} supplied",
+                    StatementTypes::Label,
+                    args.len()
+                ),
+            )
+        }
+        statement_struct.statement_type = StatementTypes::Compare;
+        statement_struct.arg1 = Some(args[0]);
+        statement_struct.arg2 = Some(args[1]);
+    } else if statement.contains("^") {
+        if args.len() != 1 {
+            error(
+                Box::new(SyntaxError::InvalidArguments),
+                statement_index,
+                format!(
+                    "{:?} requires 1 argument, {} supplied",
+                    StatementTypes::Greater,
+                    args.len()
+                ),
+            )
+        }
+        statement_struct.statement_type = StatementTypes::Greater;
+        statement_struct.arg2 = Some(args[0]);
+    } else if statement.contains("<") {
+        if args.len() != 1 {
+            error(
+                Box::new(SyntaxError::InvalidArguments),
+                statement_index,
+                format!(
+                    "{:?} requires 1 argument, {} supplied",
+                    StatementTypes::Less,
+                    args.len()
+                ),
+            )
+        }
+        statement_struct.statement_type = StatementTypes::Less;
+        statement_struct.arg2 = Some(args[0]);
+    } else if statement.contains("=") {
+        if args.len() != 1 {
+            error(
+                Box::new(SyntaxError::InvalidArguments),
+                statement_index,
+                format!(
+                    "{:?} requires 1 argument, {} supplied",
+                    StatementTypes::Equal,
+                    args.len()
+                ),
+            )
+        }
+        statement_struct.statement_type = StatementTypes::Equal;
+        statement_struct.arg2 = Some(args[0]);
     }
 
     statement_struct
@@ -263,6 +340,7 @@ fn parse_argument(arg: &str, statement_index: u32) -> Option<Argument> {
                 None
             }
         },
+        l if l.chars().all(|c| c == '.') => Some(Argument::Label { index: l.len() as u8 }),
         _ => None,
     }
 }

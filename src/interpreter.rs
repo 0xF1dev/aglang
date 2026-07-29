@@ -1,8 +1,22 @@
+use std::cmp::PartialEq;
 use std::io;
 use std::io::Write;
 
-use crate::error::{SyntaxError, error, RuntimeError};
+use crate::error::{RuntimeError, SyntaxError, error};
 use crate::parser::{Argument, Statement, StatementTypes};
+
+#[derive(Debug)]
+struct Label {
+    index: u8,
+    instruction: u32,
+}
+
+#[derive(PartialEq)]
+enum Compare {
+    Equal,
+    Greater,
+    Less,
+}
 
 pub struct Interpreter {
     r0: u8,
@@ -10,6 +24,8 @@ pub struct Interpreter {
     stack: Vec<u8>,
     instruction_pointer: u32,
     loops: Vec<u32>,
+    labels: Vec<Label>,
+    current_comparison: Option<Compare>,
 }
 
 impl Interpreter {
@@ -20,12 +36,66 @@ impl Interpreter {
             stack: Vec::new(),
             instruction_pointer: 0,
             loops: Vec::new(),
+            labels: Vec::new(),
+            current_comparison: None,
+        }
+    }
+
+    fn preprocess(&mut self, statements: &Vec<Statement>) {
+        for (i, statement) in statements.iter().enumerate() {
+            if statement.statement_type == StatementTypes::Label {
+                let index = match statement.arg2.unwrap() {
+                    Argument::Label { index: i } => i,
+                    _ => {
+                        error(
+                            Box::new(SyntaxError::InvalidArguments),
+                            self.instruction_pointer,
+                            format!(
+                                "Cannot use argument of type {} as label definition.",
+                                statement.arg2.unwrap()
+                            ),
+                        );
+                        return;
+                    }
+                };
+                self.labels.push(Label {
+                    index,
+                    instruction: i as u32,
+                })
+            }
         }
     }
 
     pub fn interpret(&mut self, statements: Vec<Statement>) {
+        self.preprocess(&statements);
+
         while self.instruction_pointer < statements.len() as u32 {
             let statement = statements[self.instruction_pointer as usize];
+
+            if statement.statement_type == StatementTypes::Greater
+                || statement.statement_type == StatementTypes::Less
+                || statement.statement_type == StatementTypes::Equal
+            {
+                if statements
+                    .get(self.instruction_pointer as usize - 1)
+                    .is_none()
+                    || statements
+                        .get(self.instruction_pointer as usize - 1)
+                        .unwrap()
+                        .statement_type
+                        != StatementTypes::Compare
+                {
+                    error(
+                        Box::new(SyntaxError::InvalidStatement),
+                        self.instruction_pointer,
+                        format!(
+                            "statement {:?} has to be preceded by a {:?} statement.",
+                            statement.statement_type,
+                            StatementTypes::Compare
+                        ),
+                    )
+                }
+            }
 
             match statement.statement_type {
                 StatementTypes::LoopStart => {
@@ -40,6 +110,59 @@ impl Interpreter {
                         self.loops.pop();
                     }
                 }
+                StatementTypes::Compare => {
+                    let first_value = self.get_argument_value(statement.arg1.unwrap());
+                    let second_value = self.get_argument_value(statement.arg2.unwrap());
+                    if first_value == second_value {
+                        self.current_comparison = Some(Compare::Equal)
+                    } else if first_value > second_value {
+                        self.current_comparison = Some(Compare::Greater)
+                    } else if first_value < second_value {
+                        self.current_comparison = Some(Compare::Less)
+                    }
+                }
+                StatementTypes::Greater => {
+                    let label_index = self.get_argument_value(statement.arg2.unwrap());
+                    let label = self.labels.iter().find(|l| l.index == label_index);
+                    if label.is_none() {
+                        error(
+                            Box::new(SyntaxError::InvalidArguments),
+                            self.instruction_pointer,
+                            format!("Label {} isn't defined.", ".".repeat(label_index as usize)),
+                        )
+                    }
+                    if self.current_comparison == Some(Compare::Greater) {
+                        self.instruction_pointer = label.unwrap().instruction;
+                    }
+                }
+                StatementTypes::Less => {
+                    let label_index = self.get_argument_value(statement.arg2.unwrap());
+                    let label = self.labels.iter().find(|l| l.index == label_index);
+                    if label.is_none() {
+                        error(
+                            Box::new(SyntaxError::InvalidArguments),
+                            self.instruction_pointer,
+                            format!("Label {} isn't defined.", ".".repeat(label_index as usize)),
+                        )
+                    }
+                    if self.current_comparison == Some(Compare::Less) {
+                        self.instruction_pointer = label.unwrap().instruction;
+                    }
+                }
+                StatementTypes::Equal => {
+                    let label_index = self.get_argument_value(statement.arg2.unwrap());
+                    let label = self.labels.iter().find(|l| l.index == label_index);
+                    if label.is_none() {
+                        error(
+                            Box::new(SyntaxError::InvalidArguments),
+                            self.instruction_pointer,
+                            format!("Label {} isn't defined.", ".".repeat(label_index as usize)),
+                        )
+                    }
+                    if self.current_comparison == Some(Compare::Equal) {
+                        self.instruction_pointer = label.unwrap().instruction;
+                    }
+                }
                 StatementTypes::Copy => {
                     let value = self.get_argument_value(statement.arg1.unwrap());
                     match statement.arg2.unwrap() {
@@ -49,7 +172,7 @@ impl Interpreter {
                         Argument::StdOut { as_number: false } => {
                             print!("{}", char::from(value));
                             io::stdout().flush().unwrap()
-                        },
+                        }
                         Argument::StdOut { as_number: true } => {
                             print!("{value}");
                             io::stdout().flush().unwrap()
@@ -185,13 +308,14 @@ impl Interpreter {
                         }
                     }
                 }
-                _ => error(
+                _ if statement.statement_type != StatementTypes::Label => error(
                     Box::new(SyntaxError::InvalidStatement),
                     self.instruction_pointer,
                     "Invalid statement provided.",
                 ),
+                _ => {}
             }
-            
+
             self.instruction_pointer += 1;
         }
     }
@@ -213,6 +337,7 @@ impl Interpreter {
                     0
                 }
             }
+            Argument::Label { index: i } => i,
             _ => {
                 error(
                     Box::new(SyntaxError::InvalidSource),
