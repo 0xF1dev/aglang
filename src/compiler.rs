@@ -1,4 +1,4 @@
-use crate::error::{CompileError, SyntaxError, error, format_error};
+use crate::error::{CompileError, SyntaxError, format_error};
 use crate::parser::{Argument, Statement, StatementTypes};
 use std::cmp::PartialEq;
 use clap::ValueEnum;
