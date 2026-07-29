@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use compiler::Compiler;
+use compiler::{Compiler, Target};
 use interpreter::Interpreter;
 use std::error::Error;
 use std::ffi::OsStr;
@@ -40,6 +40,10 @@ enum Commands {
         #[arg(short, long)]
         output: String,
 
+        /// Target platform
+        #[arg(short, long, value_enum)]
+        target: Option<Target>,
+
         /// Keep the output assembly instead of deleting it
         #[arg(long)]
         keep_asm: bool,
@@ -53,7 +57,7 @@ enum Commands {
 #[derive(Debug)]
 enum CompilePhase {
     Assembler,
-    Linker
+    Linker,
 }
 
 struct CompileError {
@@ -81,12 +85,15 @@ fn main() {
         Commands::Build {
             file,
             output,
+            target,
             keep_asm,
-            keep_obj
+            keep_obj,
         } => {
-            if std::env::consts::OS != "linux" || std::env::consts::ARCH != "x86_64" {
+            if (std::env::consts::OS != "linux" || std::env::consts::ARCH != "x86_64")
+                && (std::env::consts::OS != "windows" || std::env::consts::ARCH != "x86_64")
+            {
                 eprintln!(
-                    "\x1b[1;31mCurrently, the compiler only supports x86-64 Linux, but the detected setup is {} {}",
+                    "\x1b[1;31mCurrently, the compiler only supports x86-64 Linux and x86-64 Windows, but the detected setup is {} {}",
                     std::env::consts::ARCH,
                     std::env::consts::OS
                 );
@@ -101,7 +108,24 @@ fn main() {
             };
             let statements = parser::parse_source(src);
             let mut compiler = Compiler::new();
-            let asm = compiler.compile_to_asm(statements);
+            let target = match target {
+                Some(t) => *t,
+                None => {
+                    if std::env::consts::OS == "linux" {
+                        Target::Linux
+                    } else if std::env::consts::OS == "windows" {
+                        Target::Windows
+                    } else {
+                        eprintln!(
+                            "\x1b[1;31mCurrently, the compiler only supports x86-64 Linux and x86-64 Windows, but the detected setup is {} {}",
+                            std::env::consts::ARCH,
+                            std::env::consts::OS
+                        );
+                        std::process::exit(1);
+                    }
+                }
+            };
+            let asm = compiler.compile_to_asm(statements, target);
             let basename = Path::new(output)
                 .file_stem()
                 .unwrap_or(OsStr::new("aglang_program"))
@@ -118,6 +142,7 @@ fn main() {
                 format!("{basename}.s"),
                 format!("{basename}.o"),
                 output.clone(),
+                target,
             ) {
                 Ok(()) => {
                     println!("\x1b[0;32mProgram compiled successfully.")
@@ -149,47 +174,183 @@ fn write_asm_to_file(filename: String, source: String) -> Result<(), Box<dyn Err
     Ok(())
 }
 
-fn compile_asm(asm_file: String, obj_file: String, output: String) -> Result<(), CompileError> {
-    let cmd_output = match Command::new("as")
-        .arg(asm_file)
-        .arg("-o")
-        .arg(obj_file.clone())
-        .output() {
-        Ok(o) => o,
-        Err(e) if e.kind() == NotFound => {
-            eprintln!("\x1b[1;31mCommand \"as\" not found. Is GCC installed?");
-            std::process::exit(1)
-        }
-        Err(e) => {
-            eprintln!("\x1b[1;31mCould not run \"as\" command: {e}");
-            std::process::exit(1)
-        }
-    };
+fn compile_asm(
+    asm_file: String,
+    obj_file: String,
+    output: String,
+    target: Target,
+) -> Result<(), CompileError> {
+    if std::env::consts::OS == "linux" {
+        match target {
+            Target::Linux => {
+                let cmd_output = match Command::new("as")
+                    .arg(asm_file)
+                    .arg("-o")
+                    .arg(obj_file.clone())
+                    .output()
+                {
+                    Ok(o) => o,
+                    Err(e) if e.kind() == NotFound => {
+                        eprintln!("\x1b[1;31mCommand \"as\" not found. Is GCC installed?");
+                        std::process::exit(1)
+                    }
+                    Err(e) => {
+                        eprintln!("\x1b[1;31mCould not run \"as\" command: {e}");
+                        std::process::exit(1)
+                    }
+                };
 
-    if !cmd_output.status.success() {
-        return Err(CompileError{ phase: CompilePhase::Assembler, code: cmd_output.status.code().unwrap_or(1), output: cmd_output.stderr })
-    }
+                if !cmd_output.status.success() {
+                    return Err(CompileError {
+                        phase: CompilePhase::Assembler,
+                        code: cmd_output.status.code().unwrap_or(1),
+                        output: cmd_output.stderr,
+                    });
+                }
 
-    let cmd_output = match Command::new("ld")
-        .arg("-s")
-        .arg("-n")
-        .arg(obj_file.clone())
-        .arg("-o")
-        .arg(output)
-        .output() {
-        Ok(o) => o,
-        Err(e) if e.kind() == NotFound => {
-            eprintln!("\x1b[1;31mCommand \"ld\" not found. Is it installed?");
-            std::process::exit(1)
-        }
-        Err(e) => {
-            eprintln!("\x1b[1;31mCould not run \"ld\" command: {e}");
-            std::process::exit(1)
-        }
-    };
+                let cmd_output = match Command::new("ld")
+                    .arg("-s")
+                    .arg("-n")
+                    .arg(obj_file.clone())
+                    .arg("-o")
+                    .arg(output)
+                    .output()
+                {
+                    Ok(o) => o,
+                    Err(e) if e.kind() == NotFound => {
+                        eprintln!("\x1b[1;31mCommand \"ld\" not found. Is it installed?");
+                        std::process::exit(1)
+                    }
+                    Err(e) => {
+                        eprintln!("\x1b[1;31mCould not run \"ld\" command: {e}");
+                        std::process::exit(1)
+                    }
+                };
 
-    if !cmd_output.status.success() {
-        return Err(CompileError{ phase: CompilePhase::Linker, code: cmd_output.status.code().unwrap_or(1), output: cmd_output.stderr })
+                if !cmd_output.status.success() {
+                    return Err(CompileError {
+                        phase: CompilePhase::Linker,
+                        code: cmd_output.status.code().unwrap_or(1),
+                        output: cmd_output.stderr,
+                    });
+                }
+            }
+            Target::Windows => {
+                let cmd_output = match Command::new("x86_64-w64-mingw32-as")
+                    .arg(asm_file)
+                    .arg("-o")
+                    .arg(obj_file.clone())
+                    .output()
+                {
+                    Ok(o) => o,
+                    Err(e) if e.kind() == NotFound => {
+                        eprintln!("\x1b[1;31mCommand \"x86_64-w64-mingw32-as\" not found. Is MinGW-W64 installed?");
+                        std::process::exit(1)
+                    }
+                    Err(e) => {
+                        eprintln!("\x1b[1;31mCould not run \"x86_64-w64-mingw32-as\" command: {e}");
+                        std::process::exit(1)
+                    }
+                };
+
+                if !cmd_output.status.success() {
+                    return Err(CompileError {
+                        phase: CompilePhase::Assembler,
+                        code: cmd_output.status.code().unwrap_or(1),
+                        output: cmd_output.stderr,
+                    });
+                }
+
+                let cmd_output = match Command::new("x86_64-w64-mingw32-ld")
+                    .arg("-s")
+                    .arg("-n")
+                    .arg(obj_file.clone())
+                    .arg("-lmsvcrt")
+                    .arg("-o")
+                    .arg(output)
+                    .output()
+                {
+                    Ok(o) => o,
+                    Err(e) if e.kind() == NotFound => {
+                        eprintln!("\x1b[1;31mCommand \"x86_64-w64-mingw32-ld\" not found. Is MinGW-W64 installed?");
+                        std::process::exit(1)
+                    }
+                    Err(e) => {
+                        eprintln!("\x1b[1;31mCould not run \"x86_64-w64-mingw32-ld\" command: {e}");
+                        std::process::exit(1)
+                    }
+                };
+
+                if !cmd_output.status.success() {
+                    return Err(CompileError {
+                        phase: CompilePhase::Linker,
+                        code: cmd_output.status.code().unwrap_or(1),
+                        output: cmd_output.stderr,
+                    });
+                }
+            }
+        }
+    } else if std::env::consts::OS == "windows" {
+        match target {
+            Target::Windows => {
+                let cmd_output = match Command::new("as.exe")
+                    .arg(asm_file)
+                    .arg("-o")
+                    .arg(obj_file.clone())
+                    .output()
+                {
+                    Ok(o) => o,
+                    Err(e) if e.kind() == NotFound => {
+                        eprintln!("\x1b[1;31mCommand \"as.exe\" not found. Is MinGW installed?");
+                        std::process::exit(1)
+                    }
+                    Err(e) => {
+                        eprintln!("\x1b[1;31mCould not run \"as.exe\" command: {e}");
+                        std::process::exit(1)
+                    }
+                };
+
+                if !cmd_output.status.success() {
+                    return Err(CompileError {
+                        phase: CompilePhase::Assembler,
+                        code: cmd_output.status.code().unwrap_or(1),
+                        output: cmd_output.stderr,
+                    });
+                }
+
+                let cmd_output = match Command::new("ld.exe")
+                    .arg("-s")
+                    .arg("-n")
+                    .arg(obj_file.clone())
+                    .arg("-lmsvcrt")
+                    .arg("-o")
+                    .arg(output)
+                    .output()
+                {
+                    Ok(o) => o,
+                    Err(e) if e.kind() == NotFound => {
+                        eprintln!("\x1b[1;31mCommand \"ld.exe\" not found. Is MinGW installed?");
+                        std::process::exit(1)
+                    }
+                    Err(e) => {
+                        eprintln!("\x1b[1;31mCould not run \"ld.exe\" command: {e}");
+                        std::process::exit(1)
+                    }
+                };
+
+                if !cmd_output.status.success() {
+                    return Err(CompileError {
+                        phase: CompilePhase::Linker,
+                        code: cmd_output.status.code().unwrap_or(1),
+                        output: cmd_output.stderr,
+                    });
+                }
+            }
+            Target::Linux => {
+                eprintln!("\x1b[1;31mCross-compiling from Windows to Linux is not supported.");
+                std::process::exit(1)
+            }
+        }
     }
 
     Ok(())

@@ -1,5 +1,13 @@
-use crate::error::{SyntaxError, error};
+use crate::error::{CompileError, SyntaxError, error};
 use crate::parser::{Argument, Statement, StatementTypes};
+use std::cmp::PartialEq;
+use clap::ValueEnum;
+
+#[derive(PartialEq, Clone, Copy, ValueEnum)]
+pub enum Target {
+    Linux,
+    Windows,
+}
 
 pub struct Compiler {
     loop_count: u32,
@@ -7,6 +15,8 @@ pub struct Compiler {
     input_loop_count: u32,
     active_input_loops: Vec<u32>,
     decimal_print_loop_count: u32,
+    pushes: u32,
+    pops: u32,
 }
 
 impl Compiler {
@@ -17,11 +27,18 @@ impl Compiler {
             input_loop_count: 0,
             active_input_loops: Vec::new(),
             decimal_print_loop_count: 0,
+            pushes: 0,
+            pops: 0,
         }
     }
 
-    pub fn compile_to_asm(&mut self, statements: Vec<Statement>) -> String {
-        let mut asm = String::from(".intel_syntax noprefix\n.global _start\n\n");
+    pub fn compile_to_asm(&mut self, statements: Vec<Statement>, target: Target) -> String {
+        let mut asm = String::from(".intel_syntax noprefix\n");
+        if target == Target::Linux {
+            asm.push_str(".global _start\n\n")
+        } else {
+            asm.push_str(".global main\n\n")
+        }
 
         if statements
             .iter()
@@ -43,7 +60,15 @@ impl Compiler {
             asm.push_str(".section .bss\n.lcomm decimal_buf, 3\n\n");
         }
 
-        asm.push_str(".section .text\n_start:\n    xor r12, r12\n    xor r13, r13\n");
+        asm.push_str(".section .text\n");
+
+        if target == Target::Linux {
+            asm.push_str("_start:\n")
+        } else {
+            asm.push_str("main:\n")
+        }
+
+        asm.push_str("    push r12\n    xor r12, r12\n    push r13\n    xor r13, r13\n");
 
         for (statement_index, statement) in statements.iter().enumerate() {
             match statement.statement_type {
@@ -88,8 +113,8 @@ impl Compiler {
                     (Argument::R0 | Argument::R1, Argument::Literal(val)) => {
                         asm.push_str(
                             format!(
-                                "    cmp {}, {val}\n",
-                                arg_to_asm_string(statement.arg2.unwrap(), ArgSize::Small)
+                                "    cmp {0}, {val}\n",
+                                arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full)
                             )
                                 .as_str(),
                         );
@@ -104,7 +129,7 @@ impl Compiler {
                         asm.push_str(format!("    cmp [rsp], {}\n", arg_to_asm_string(statement.arg2.unwrap(), ArgSize::Full)).as_str())
                     }
                     (Argument::R0 | Argument::R1, Argument::Stack) => {
-                        asm.push_str(format!("    cmp {}, [rsp]\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full)).as_str())
+                        asm.push_str(format!("    cmp {0}, [rsp]\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full)).as_str())
                     }
                     (Argument::Stack, Argument::Stack) => {
                         asm.push_str("    cmp [rsp], [rsp]\n")
@@ -186,36 +211,62 @@ impl Compiler {
                     }
                     (Argument::Literal(val), Argument::Stack) => {
                         asm.push_str(format!("    push {val}\n").as_str());
+                        self.pushes += 1;
                     }
                     (Argument::Literal(val), Argument::StdOut { as_number: false | true }) => {
                         if statement.arg2.unwrap() == (Argument::StdOut { as_number: true }) {
-                            asm.push_str(format!("    mov rax, {val}\n    lea rcx, [decimal_buf + 2 + rip]\n    mov rbx, 10\n    .dec_loop{0}:\n    xor rdx, rdx\n    div rbx\n    add dl, '0'\n    mov [rcx], dl\n    dec rcx\n    test rax, rax\n    jnz .dec_loop{0}\n    lea rdx, [decimal_buf + 2 + rip]\n    sub rdx, rcx\n    inc rcx\n    mov rsi, rcx\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, rcx\n    syscall\n", self.decimal_print_loop_count).as_str());
+                            if target == Target::Linux {
+                                asm.push_str(format!("    mov rax, {val}\n    lea rcx, [decimal_buf + 2 + rip]\n    mov rbx, 10\n    .dec_loop{0}:\n    xor rdx, rdx\n    div rbx\n    add dl, '0'\n    mov [rcx], dl\n    dec rcx\n    test rax, rax\n    jnz .dec_loop{0}\n    lea rdx, [decimal_buf + 2 + rip]\n    sub rdx, rcx\n    inc rcx\n    mov rsi, rcx\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, rcx\n    syscall\n", self.decimal_print_loop_count).as_str());
+                            } else {
+                                asm.push_str(format!("    mov rax, {val}\n    lea rcx, [decimal_buf + 2 + rip]\n    mov r8, 10\n    .dec_loop{0}:\n    xor rdx, rdx\n    div r8\n    add dl, '0'\n    mov [rcx], dl\n    dec rcx\n    test rax, rax\n    jnz .dec_loop{0}\n    lea rdx, [decimal_buf + 2 + rip]\n    sub rdx, rcx\n    inc rcx\n    mov r14, rcx\n    .print_loop{0}:\n    movzx rcx, byte ptr [r14]\n    cmp rcx, 0\n    je .print_end{0}\n    mov rbp, rsp\n    and rsp, -16\n    sub rsp, 32\n    call putchar\n    mov rsp, rbp\n    inc r14\n    jmp .print_loop{0}\n    .print_end{0}:\n", self.decimal_print_loop_count).as_str())
+                            }
                             self.decimal_print_loop_count += 1;
                         } else {
-                            asm.push_str(format!("    push {val}\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, rsp\n    mov rdx, 1\n    syscall\n    pop rax\n").as_str())
+                            if target == Target::Linux {
+                                asm.push_str(format!("    push {val}\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, rsp\n    mov rdx, 1\n    syscall\n    pop rax\n").as_str())
+                            } else {
+                                asm.push_str(format!("    mov rcx, {val}\n    mov rbp, rsp\n    and rsp, -16\n    sub rsp, 32\n    call putchar\n    mov rsp, rbp\n").as_str())
+                            }
                         }
                     }
                     (Argument::R0 | Argument::R1, Argument::StdOut { as_number: false | true }) => {
                         if statement.arg2.unwrap() == (Argument::StdOut { as_number: true }) {
-                            asm.push_str(format!("    mov rax, {0}\n    lea rcx, [decimal_buf + 2 + rip]\n    mov rbx, 10\n    .dec_loop{1}:\n    xor rdx, rdx\n    div rbx\n    add dl, '0'\n    mov [rcx], dl\n    dec rcx\n    test rax, rax\n    jnz .dec_loop{1}\n    lea rdx, [decimal_buf + 2 + rip]\n    sub rdx, rcx\n    inc rcx\n    mov rsi, rcx\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, rcx\n    syscall\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full), self.decimal_print_loop_count).as_str());
+                            if target == Target::Linux {
+                                asm.push_str(format!("    mov rax, {0}\n    lea rcx, [decimal_buf + 2 + rip]\n    mov rbx, 10\n    .dec_loop{1}:\n    xor rdx, rdx\n    div rbx\n    add dl, '0'\n    mov [rcx], dl\n    dec rcx\n    test rax, rax\n    jnz .dec_loop{1}\n    lea rdx, [decimal_buf + 2 + rip]\n    sub rdx, rcx\n    inc rcx\n    mov rsi, rcx\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, rcx\n    syscall\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full), self.decimal_print_loop_count).as_str());
+                            } else {
+                                asm.push_str(format!("    mov rax, {0}\n    lea rcx, [decimal_buf + 2 + rip]\n    mov r8, 10\n    .dec_loop{1}:\n    xor rdx, rdx\n    div r8\n    add dl, '0'\n    mov [rcx], dl\n    dec rcx\n    test rax, rax\n    jnz .dec_loop{1}\n    lea rdx, [decimal_buf + 2 + rip]\n    sub rdx, rcx\n    inc rcx\n    mov r14, rcx\n    .print_loop{1}:\n    movzx rcx, byte ptr [r14]\n    cmp rcx, 0\n    je .print_end{1}\n    mov rbp, rsp\n    and rsp, -16\n    sub rsp, 32\n    call putchar\n    mov rsp, rbp\n    inc r14\n    jmp .print_loop{1}\n    .print_end{1}:\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full), self.decimal_print_loop_count).as_str())
+                            }
                             self.decimal_print_loop_count += 1;
                         } else {
-                            asm.push_str(format!("    push {0}\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, rsp\n    mov rdx, 1\n    syscall\n    pop {0}\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full)).as_str())
+                            if target == Target::Linux {
+                                asm.push_str(format!("    push {0}\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, rsp\n    mov rdx, 1\n    syscall\n    pop {0}\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full)).as_str())
+                            } else {
+                                asm.push_str(format!("    push {0}\n    pop rcx\n    mov rbp, rsp\n    and rsp, -16\n    sub rsp, 32\n    call putchar\n    mov rsp, rbp\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full)).as_str())
+                            }
                         }
                     }
                     (Argument::Stack, Argument::StdOut { as_number: false | true }) => {
                         if statement.arg2.unwrap() == (Argument::StdOut { as_number: true }) {
-                            asm.push_str(format!("    mov rax, [rsp]\n    lea rcx, [decimal_buf + 2 + rip]\n    mov rbx, 10\n    .dec_loop{0}:\n    xor rdx, rdx\n    div rbx\n    add dl, '0'\n    mov [rcx], dl\n    dec rcx\n    test rax, rax\n    jnz .dec_loop{0}\n    lea rdx, [decimal_buf + 2 + rip]\n    sub rdx, rcx\n    inc rcx\n    mov rsi, rcx\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, rcx\n    syscall\n", self.decimal_print_loop_count).as_str());
+                            if target == Target::Linux {
+                                asm.push_str(format!("    mov rax, [rsp]\n    lea rcx, [decimal_buf + 2 + rip]\n    mov rbx, 10\n    .dec_loop{0}:\n    xor rdx, rdx\n    div rbx\n    add dl, '0'\n    mov [rcx], dl\n    dec rcx\n    test rax, rax\n    jnz .dec_loop{0}\n    lea rdx, [decimal_buf + 2 + rip]\n    sub rdx, rcx\n    inc rcx\n    mov rsi, rcx\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, rcx\n    syscall\n", self.decimal_print_loop_count).as_str());
+                            } else {
+                                asm.push_str(format!("    mov rax, [rsp]\n    lea rcx, [decimal_buf + 2 + rip]\n    mov r8, 10\n    .dec_loop{0}:\n    xor rdx, rdx\n    div r8\n    add dl, '0'\n    mov [rcx], dl\n    dec rcx\n    test rax, rax\n    jnz .dec_loop{0}\n    lea rdx, [decimal_buf + 2 + rip]\n    sub rdx, rcx\n    inc rcx\n    mov r14, rcx\n    .print_loop{0}:\n    movzx rcx, byte ptr [r14]\n    cmp rcx, 0\n    je .print_end{0}\n    mov rbp, rsp\n    and rsp, -16\n    sub rsp, 32\n    call putchar\n    mov rsp, rbp\n    inc r14\n    jmp .print_loop{0}\n    .print_end{0}:\n", self.decimal_print_loop_count).as_str())
+                            }
                             self.decimal_print_loop_count += 1;
                         } else {
-                            asm.push_str("    mov rax, 1\n    mov rdi, 1\n    mov rsi, rsp\n    mov rdx, 1\n    syscall\n")
+                            if target == Target::Linux {
+                                asm.push_str("    mov rax, 1\n    mov rdi, 1\n    mov rsi, rsp\n    mov rdx, 1\n    syscall\n")
+                            } else {
+                                asm.push_str("    mov rcx, [rsp]\n    mov rbp, rsp\n    and rsp, -16\n    sub rsp, 32\n    call putchar\n    mov rsp, rbp\n")
+                            }
                         }
                     }
                     (Argument::Stack, Argument::R0 | Argument::R1) => {
                         asm.push_str(format!("    mov {0}, [rsp]\n", arg_to_asm_string(statement.arg2.unwrap(), ArgSize::Full)).as_str())
                     }
                     (Argument::R0 | Argument::R1, Argument::Stack) => {
-                        asm.push_str(format!("    push {}\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full)).as_str())
+                        asm.push_str(format!("    push {}\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full)).as_str());
+                        self.pushes += 1
                     }
                     _ => {
                         error(
@@ -233,7 +284,11 @@ impl Compiler {
                         asm.push_str(format!("    xor {0}, {0}\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full)).as_str())
                     }
                     Argument::Stack => {
-                        asm.push_str("    pop rax\n")
+                        asm.push_str("    pop rax\n");
+                        self.pops += 1;
+                        if self.pops > self.pushes {
+                            error(Box::new(CompileError::StackUnderflow), statement_index as u32, "Popping would underflow the stack.")
+                        }
                     }
                     _ => {
                         error(
@@ -364,7 +419,13 @@ impl Compiler {
             }
         }
 
-        asm.push_str("    mov rax, 60\n    mov rdi, 0\n    syscall\n");
+        asm.push_str("    pop r13\n    pop r12\n");
+
+        if target == Target::Linux {
+            asm.push_str("    mov rax, 60\n    mov rdi, 0\n    syscall\n")
+        } else {
+            asm.push_str("    and rsp, -16\n    sub rsp, 32\n    mov rcx, 0\n    call exit\n    add rsp, 32\n")
+        }
 
         asm
     }

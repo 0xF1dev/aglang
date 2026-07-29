@@ -29,6 +29,19 @@ impl Display for RuntimeError {
 }
 impl Error for RuntimeError {}
 
+#[derive(Debug)]
+pub enum CompileError {
+    StackUnderflow
+}
+
+impl Display for CompileError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "CompileError({self:?})")
+    }
+}
+
+impl Error for CompileError {}
+
 pub fn error<D>(error: Box<dyn Error>, statement_number: u32, msg: D) where D: Display {
     eprintln!("Error {error} on statement {}: {msg}", statement_number + 1);
     std::process::exit(1)
