@@ -46,3 +46,7 @@ pub fn error<D>(error: Box<dyn Error>, statement_number: u32, msg: D) where D: D
     eprintln!("Error {error} on statement {}: {msg}", statement_number + 1);
     std::process::exit(1)
 }
+
+pub fn format_error<D>(error: Box<dyn Error>, statement_number: u32, msg: D) -> String where D: Display {
+    format!("Error {error} on statement {}: {msg}", statement_number + 1)
+}

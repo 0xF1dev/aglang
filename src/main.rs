@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use compiler::{Compiler, Target};
 use interpreter::Interpreter;
+use spinners::{Spinner, Spinners};
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fs;
@@ -106,6 +107,8 @@ fn main() {
                     std::process::exit(1);
                 }
             };
+            let mut spinner =
+                Spinner::with_timer(Spinners::Dots, "Compiling code into assembly...".into());
             let statements = parser::parse_source(src);
             let mut compiler = Compiler::new();
             let target = match target {
@@ -125,19 +128,34 @@ fn main() {
                     }
                 }
             };
-            let asm = compiler.compile_to_asm(statements, target);
+            let asm = match compiler.compile_to_asm(statements, target) {
+                Ok(s) => s,
+                Err(e) => {
+                    spinner.stop_and_persist(
+                        "\x1b[1;31m✖",
+                        format!("Could not generate assembly: \x1b[0m {e}"),
+                    );
+                    std::process::exit(1);
+                }
+            };
             let basename = Path::new(output)
                 .file_stem()
                 .unwrap_or(OsStr::new("aglang_program"))
                 .to_str()
                 .unwrap();
             match write_asm_to_file(format!("{basename}.s"), asm) {
-                Ok(()) => println!("\x1b[0;32mAssembly file written."),
+                Ok(()) => {
+                    spinner.stop_and_persist("\x1b[0;32m🗸", "Assembly generated!\x1b[0m".into())
+                }
                 Err(e) => {
-                    eprintln!("\x1b[1;31mCould not write assembly file: {e}");
+                    spinner.stop_and_persist(
+                        "\x1b[1;31m✖",
+                        format!("Could not write assembly: \x1b[0m {e}"),
+                    );
                     std::process::exit(1);
                 }
             };
+            let mut spinner = Spinner::with_timer(Spinners::Dots, "Compiling assembly into executable...".into());
             match compile_asm(
                 format!("{basename}.s"),
                 format!("{basename}.o"),
@@ -145,24 +163,40 @@ fn main() {
                 target,
             ) {
                 Ok(()) => {
-                    println!("\x1b[0;32mProgram compiled successfully.")
+                    spinner.stop_and_persist(
+                        "\x1b[0;32m🗸",
+                        "Program compiler successfully!\x1b[0m".into(),
+                    );
                 }
                 Err(e) => {
-                    eprintln!(
-                        "\x1b[1;31mCould not compile assembly file (phase: {:?}, error code: {}): {}",
-                        e.phase,
-                        e.code,
-                        String::from_utf8(e.output)
-                            .unwrap_or("INVALID UTF8 OUTPUT FROM BUILD COMMAND".to_string())
+                    spinner.stop_and_persist(
+                        "\x1b[1;31m✖",
+                        format!(
+                            "Could not compile assembly file (phase: {:?}, error code: {}): {}",
+                            e.phase,
+                            e.code,
+                            String::from_utf8(e.output)
+                                .unwrap_or("INVALID UTF8 OUTPUT FROM BUILD COMMAND".to_string())
+                        ),
                     );
                     std::process::exit(1);
                 }
             }
             if !keep_asm {
+                let mut spinner = Spinner::with_timer(Spinners::Dots, "Removing assembly file...".into());
                 fs::remove_file(format!("{basename}.s")).unwrap();
+                spinner.stop_and_persist(
+                    "\x1b[0;32m🗸",
+                    "Assembly file removed!\x1b[0m".into(),
+                );
             }
             if !keep_obj {
+                let mut spinner = Spinner::with_timer(Spinners::Dots, "Removing object file...".into());
                 fs::remove_file(format!("{basename}.o")).unwrap();
+                spinner.stop_and_persist(
+                    "\x1b[0;32m🗸",
+                    "Object file removed!\x1b[0m".into(),
+                );
             }
         }
     };
@@ -244,7 +278,9 @@ fn compile_asm(
                 {
                     Ok(o) => o,
                     Err(e) if e.kind() == NotFound => {
-                        eprintln!("\x1b[1;31mCommand \"x86_64-w64-mingw32-as\" not found. Is MinGW-W64 installed?");
+                        eprintln!(
+                            "\x1b[1;31mCommand \"x86_64-w64-mingw32-as\" not found. Is MinGW-W64 installed?"
+                        );
                         std::process::exit(1)
                     }
                     Err(e) => {
@@ -272,7 +308,9 @@ fn compile_asm(
                 {
                     Ok(o) => o,
                     Err(e) if e.kind() == NotFound => {
-                        eprintln!("\x1b[1;31mCommand \"x86_64-w64-mingw32-ld\" not found. Is MinGW-W64 installed?");
+                        eprintln!(
+                            "\x1b[1;31mCommand \"x86_64-w64-mingw32-ld\" not found. Is MinGW-W64 installed?"
+                        );
                         std::process::exit(1)
                     }
                     Err(e) => {
