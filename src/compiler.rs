@@ -136,7 +136,7 @@ pub fn compile_to_asm(statements: Vec<Statement>, target: Target) -> Result<Stri
                     }
                 }
                 StatementTypes::Greater => {
-                    if last_compare as usize == statement_index - 1 {
+                    if last_compare as usize != statement_index - 1 {
                         return Err(format_error(
                             Box::new(SyntaxError::InvalidStatement),
                             statement_index as u32,
@@ -163,7 +163,7 @@ pub fn compile_to_asm(statements: Vec<Statement>, target: Target) -> Result<Stri
                     asm.push_str(format!("    jg .label{index}\n").as_str())
                 }
                 StatementTypes::Less => {
-                    if last_compare as usize == statement_index - 1 {
+                    if last_compare as usize != statement_index - 1 {
                         return Err(format_error(
                             Box::new(SyntaxError::InvalidStatement),
                             statement_index as u32,
@@ -190,7 +190,7 @@ pub fn compile_to_asm(statements: Vec<Statement>, target: Target) -> Result<Stri
                     asm.push_str(format!("    jl .label{index}\n").as_str())
                 }
                 StatementTypes::Equal => {
-                    if last_compare as usize == statement_index - 1 {
+                    if last_compare as usize != statement_index - 1 {
                         return Err(format_error(
                             Box::new(SyntaxError::InvalidStatement),
                             statement_index as u32,
