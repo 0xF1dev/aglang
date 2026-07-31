@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use compiler::{Compiler, Target};
+use compiler::Target;
 use interpreter::Interpreter;
 use spinners::{Spinner, Spinners};
 use std::error::Error;
@@ -128,8 +128,7 @@ fn main() {
             let mut spinner =
                 Spinner::with_timer(Spinners::Dots, "Compiling code into assembly...".into());
             let statements = parser::parse_source(src);
-            let mut compiler = Compiler::new();
-            let asm = match compiler.compile_to_asm(statements, target) {
+            let asm = match compiler::compile_to_asm(statements, target) {
                 Ok(s) => s,
                 Err(e) => {
                     spinner.stop_and_persist(
