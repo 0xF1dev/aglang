@@ -1,4 +1,4 @@
-use crate::error::{CompileError, SyntaxError, format_error};
+use crate::error::{SyntaxError, format_error};
 use crate::parser::{Argument, Statement, StatementTypes};
 use clap::ValueEnum;
 use std::cmp::PartialEq;
@@ -14,8 +14,6 @@ pub fn compile_to_asm(statements: Vec<Statement>, target: Target) -> Result<Stri
     let mut input_loop_count: u32 = 0;
     let mut active_input_loops: Vec<u32> = Vec::new();
     let mut decimal_print_loop_count: u32 = 0;
-    let mut pushes: u32 = 0;
-    let mut pops: u32 = 0;
     let mut last_compare: isize = -2;
 
     let mut asm = String::from(".intel_syntax noprefix\n");
@@ -53,7 +51,7 @@ pub fn compile_to_asm(statements: Vec<Statement>, target: Target) -> Result<Stri
         asm.push_str("main:\n")
     }
 
-    asm.push_str("    push r12\n    xor r12, r12\n    push r13\n    xor r13, r13\n    push rbp\n    mov rbp, rsp\n");
+    asm.push_str("    push r12\n    xor r12, r12\n    push r13\n    xor r13, r13\n    push r14\n    mov r14, rsp\n");
 
     for (statement_index, statement) in statements.iter().enumerate() {
         match statement.statement_type {
@@ -228,7 +226,6 @@ pub fn compile_to_asm(statements: Vec<Statement>, target: Target) -> Result<Stri
                     }
                     (Argument::Literal(val), Argument::Stack) => {
                         asm.push_str(format!("    push {val}\n").as_str());
-                        pushes += 1;
                     }
                     (Argument::Literal(val), Argument::StdOut { as_number: false | true }) => {
                         if statement.arg2.unwrap() == (Argument::StdOut { as_number: true }) {
@@ -283,7 +280,6 @@ pub fn compile_to_asm(statements: Vec<Statement>, target: Target) -> Result<Stri
                     }
                     (Argument::R0 | Argument::R1, Argument::Stack) => {
                         asm.push_str(format!("    push {}\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full)).as_str());
-                        pushes += 1
                     }
                     _ => {
                         return Err(format_error(
@@ -301,11 +297,7 @@ pub fn compile_to_asm(statements: Vec<Statement>, target: Target) -> Result<Stri
                         asm.push_str(format!("    xor {0}, {0}\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full)).as_str())
                     }
                     Argument::Stack => {
-                        asm.push_str("    pop rax\n");
-                        pops += 1;
-                        if pops > pushes {
-                            return Err(format_error(Box::new(CompileError::StackUnderflow), statement_index as u32, "Popping would underflow the stack."));
-                        }
+                        asm.push_str("    pop rax\n    cmp rsp, r14\n    ja .underflow_exit\n");
                     }
                     _ => {
                         return Err(format_error(
@@ -436,13 +428,13 @@ pub fn compile_to_asm(statements: Vec<Statement>, target: Target) -> Result<Stri
             }
     }
 
-    asm.push_str("    mov rsp, rbp\n    pop rbp\n    pop r13\n    pop r12\n");
+    asm.push_str("    mov rsp, r14\n    pop r14\n    pop r13\n    pop r12\n");
 
     if target == Target::Linux {
-        asm.push_str("    mov rax, 60\n    mov rdi, 0\n    syscall\n")
+        asm.push_str("    mov rax, 60\n    mov rdi, 0\n    syscall\n    .underflow_exit:\n    mov rax, 60\n    mov rdi, 110\n    syscall\n")
     } else {
         asm.push_str(
-            "    and rsp, -16\n    sub rsp, 32\n    mov rcx, 0\n    call exit\n    add rsp, 32\n",
+            "    and rsp, -16\n    sub rsp, 32\n    mov rcx, 0\n    call exit\n    add rsp, 32\n    .underflow_exit:\n    and rsp, -16\n    sub rsp, 32\n    mov rcx, 110\n    call exit\n    add rsp, 32\n",
         )
     }
 
