@@ -68,7 +68,7 @@ impl Compiler {
             asm.push_str("main:\n")
         }
 
-        asm.push_str("    push r12\n    xor r12, r12\n    push r13\n    xor r13, r13\n");
+        asm.push_str("    push r12\n    xor r12, r12\n    push r13\n    xor r13, r13\n    push rbp\n    mov rbp, rsp\n");
 
         for (statement_index, statement) in statements.iter().enumerate() {
             match statement.statement_type {
@@ -415,7 +415,7 @@ impl Compiler {
             }
         }
 
-        asm.push_str("    pop r13\n    pop r12\n");
+        asm.push_str("    mov rsp, rbp\n    pop rbp\n    pop r13\n    pop r12\n");
 
         if target == Target::Linux {
             asm.push_str("    mov rax, 60\n    mov rdi, 0\n    syscall\n")
