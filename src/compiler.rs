@@ -16,6 +16,7 @@ pub fn compile_to_asm(statements: Vec<Statement>, target: Target) -> Result<Stri
     let mut decimal_print_loop_count: u32 = 0;
     let mut pushes: u32 = 0;
     let mut pops: u32 = 0;
+    let mut last_compare: isize = -2;
 
     let mut asm = String::from(".intel_syntax noprefix\n");
     if target == Target::Linux {
@@ -80,58 +81,72 @@ pub fn compile_to_asm(statements: Vec<Statement>, target: Target) -> Result<Stri
                     };
                     asm.push_str(format!("    .label{index}:\n").as_str())
                 }
-                StatementTypes::Compare => match (statement.arg1.unwrap(), statement.arg2.unwrap()) {
-                    (Argument::Literal(val0), Argument::Literal(val1)) => {
-                        asm.push_str(format!("    mov r14, {val0}\n    cmp r14, {val1}\n").as_str())
+                StatementTypes::Compare => {
+                    last_compare = statement_index as isize;
+                    match (statement.arg1.unwrap(), statement.arg2.unwrap()) {
+                        (Argument::Literal(val0), Argument::Literal(val1)) => {
+                            asm.push_str(format!("    mov r14, {val0}\n    cmp r14, {val1}\n").as_str())
+                        }
+                        (Argument::Literal(val), Argument::R0 | Argument::R1) => {
+                            asm.push_str(
+                                format!(
+                                    "    mov r14, {val}\n    cmp r14, {}\n",
+                                    arg_to_asm_string(statement.arg2.unwrap(), ArgSize::Small)
+                                )
+                                    .as_str(),
+                            );
+                        }
+                        (Argument::R0 | Argument::R1, Argument::Literal(val)) => {
+                            asm.push_str(
+                                format!(
+                                    "    cmp {0}, {val}\n",
+                                    arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full)
+                                )
+                                    .as_str(),
+                            );
+                        }
+                        (Argument::Literal(val), Argument::Stack) => {
+                            asm.push_str(format!("    mov r14, {val}\n    cmp r14, [rsp]\n").as_str());
+                        }
+                        (Argument::Stack, Argument::Literal(val)) => {
+                            asm.push_str(format!("    cmp [rsp], {val}\n").as_str());
+                        }
+                        (Argument::Stack, Argument::R0 | Argument::R1) => {
+                            asm.push_str(format!("    cmp [rsp], {}\n", arg_to_asm_string(statement.arg2.unwrap(), ArgSize::Full)).as_str())
+                        }
+                        (Argument::R0 | Argument::R1, Argument::Stack) => {
+                            asm.push_str(format!("    cmp {0}, [rsp]\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full)).as_str())
+                        }
+                        (Argument::Stack, Argument::Stack) => {
+                            asm.push_str("    cmp [rsp], [rsp]\n")
+                        }
+                        (Argument::R0 | Argument::R1, Argument::R0 | Argument::R1) => {
+                            asm.push_str(format!("    cmp {}, {}\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full), arg_to_asm_string(statement.arg2.unwrap(), ArgSize::Full)).as_str())
+                        }
+                        _ => {
+                            return Err(format_error(
+                                Box::new(SyntaxError::InvalidArguments),
+                                statement_index as u32,
+                                format!(
+                                    "Invalid arguments supplied for {:?}",
+                                    StatementTypes::Compare
+                                ),
+                            ))
+                        }
                     }
-                    (Argument::Literal(val), Argument::R0 | Argument::R1) => {
-                        asm.push_str(
-                            format!(
-                                "    mov r14, {val}\n    cmp r14, {}\n",
-                                arg_to_asm_string(statement.arg2.unwrap(), ArgSize::Small)
-                            )
-                                .as_str(),
-                        );
-                    }
-                    (Argument::R0 | Argument::R1, Argument::Literal(val)) => {
-                        asm.push_str(
-                            format!(
-                                "    cmp {0}, {val}\n",
-                                arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full)
-                            )
-                                .as_str(),
-                        );
-                    }
-                    (Argument::Literal(val), Argument::Stack) => {
-                        asm.push_str(format!("    mov r14, {val}\n    cmp r14, [rsp]\n").as_str());
-                    }
-                    (Argument::Stack, Argument::Literal(val)) => {
-                        asm.push_str(format!("    cmp [rsp], {val}\n").as_str());
-                    }
-                    (Argument::Stack, Argument::R0 | Argument::R1) => {
-                        asm.push_str(format!("    cmp [rsp], {}\n", arg_to_asm_string(statement.arg2.unwrap(), ArgSize::Full)).as_str())
-                    }
-                    (Argument::R0 | Argument::R1, Argument::Stack) => {
-                        asm.push_str(format!("    cmp {0}, [rsp]\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full)).as_str())
-                    }
-                    (Argument::Stack, Argument::Stack) => {
-                        asm.push_str("    cmp [rsp], [rsp]\n")
-                    }
-                    (Argument::R0 | Argument::R1, Argument::R0 | Argument::R1) => {
-                        asm.push_str(format!("    cmp {}, {}\n", arg_to_asm_string(statement.arg1.unwrap(), ArgSize::Full), arg_to_asm_string(statement.arg2.unwrap(), ArgSize::Full)).as_str())
-                    }
-                    _ => {
+                }
+                StatementTypes::Greater => {
+                    if last_compare as usize == statement_index - 1 {
                         return Err(format_error(
-                            Box::new(SyntaxError::InvalidArguments),
+                            Box::new(SyntaxError::InvalidStatement),
                             statement_index as u32,
                             format!(
-                                "Invalid arguments supplied for {:?}",
+                                "Statement {:?} has to be preceded by a {:?} statement.",
+                                statement.statement_type,
                                 StatementTypes::Compare
                             ),
                         ))
                     }
-                }
-                StatementTypes::Greater => {
                     let index = match statement.arg2.unwrap() {
                         Argument::Label { index: i } => i,
                         _ => {
@@ -148,6 +163,17 @@ pub fn compile_to_asm(statements: Vec<Statement>, target: Target) -> Result<Stri
                     asm.push_str(format!("    jg .label{index}\n").as_str())
                 }
                 StatementTypes::Less => {
+                    if last_compare as usize == statement_index - 1 {
+                        return Err(format_error(
+                            Box::new(SyntaxError::InvalidStatement),
+                            statement_index as u32,
+                            format!(
+                                "Statement {:?} has to be preceded by a {:?} statement.",
+                                statement.statement_type,
+                                StatementTypes::Compare
+                            ),
+                        ))
+                    }
                     let index = match statement.arg2.unwrap() {
                         Argument::Label { index: i } => i,
                         _ => {
@@ -164,6 +190,17 @@ pub fn compile_to_asm(statements: Vec<Statement>, target: Target) -> Result<Stri
                     asm.push_str(format!("    jl .label{index}\n").as_str())
                 }
                 StatementTypes::Equal => {
+                    if last_compare as usize == statement_index - 1 {
+                        return Err(format_error(
+                            Box::new(SyntaxError::InvalidStatement),
+                            statement_index as u32,
+                            format!(
+                                "Statement {:?} has to be preceded by a {:?} statement.",
+                                statement.statement_type,
+                                StatementTypes::Compare
+                            ),
+                        ))
+                    }
                     let index = match statement.arg2.unwrap() {
                         Argument::Label { index: i } => i,
                         _ => {
