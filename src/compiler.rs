@@ -313,7 +313,11 @@ pub fn compile_to_asm(statements: Vec<Statement>, target: Target) -> Result<Stri
                 StatementTypes::Input => {
                     input_loop_count += 1;
                     active_input_loops.push(input_loop_count - 1);
-                    asm.push_str(format!("    mov rax, 0\n    mov rdi, 0\n    lea rsi, [rip + input_buf]\n    mov rdx, 256\n    syscall\n    mov rcx, rax\n    sub rcx, 2\n    push 0\n.input_loop{0}:\n    lea rbx, [rip + input_buf]\n    movzx rbx, byte ptr [rbx + rcx]\n    push rbx\n    dec rcx\n    cmp rcx, 0\n    jge .input_loop{0}\n", input_loop_count - 1).as_str())
+                    if target == Target::Linux {
+                        asm.push_str(format!("    mov rax, 0\n    mov rdi, 0\n    lea rsi, [rip + input_buf]\n    mov rdx, 256\n    syscall\n    mov rcx, rax\n    sub rcx, 2\n    push 0\n.input_loop{0}:\n    lea rbx, [rip + input_buf]\n    movzx rbx, byte ptr [rbx + rcx]\n    push rbx\n    dec rcx\n    cmp rcx, 0\n    jge .input_loop{0}\n", input_loop_count - 1).as_str())
+                    } else {
+                        asm.push_str(format!("    mov rbp, rsp\n    and rsp, -16\n    sub rsp, 32\n    lea rcx, [rip + input_buf]\n    mov rdx, 256\n    call gets_s\n    mov rsp, rbp\n    mov rbp, rsp\n    and rsp, -16\n    sub rsp, 32\n    lea rcx, [rip + input_buf]\n    call strlen\n    mov rsp, rbp\n    cmp rax, 0\n    je .input_end{0}\n    mov rcx, rax\n    dec rcx\n    push 0\n    .input_loop{0}:\n    lea r8, [rip + input_buf]\n    movzx r8, byte ptr [r8 + rcx]\n    push r8\n    dec rcx\n    cmp rcx, 0\n    jge .input_loop{0}\n    .input_end{0}:\n", input_loop_count - 1).as_str())
+                    }
                 }
                 StatementTypes::Add => match (statement.arg1.unwrap(), statement.arg2.unwrap()) {
                     (Argument::R0 | Argument::R1, Argument::Literal(val)) => {
