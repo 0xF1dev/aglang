@@ -211,7 +211,7 @@ fn main() {
                 spinner.stop_and_persist("\x1b[0;32m🗸", "Object file removed!\x1b[0m".into());
             }
             println!(
-                "\x1b[1;92mBuild completed!\n\x1b[0;mThe output executable is in \x1b[1m{output}"
+                "\x1b[1;92mBuild completed!\n\x1b[0;mThe output executable is \x1b[1m{output}"
             )
         }
         Commands::Transpile {
@@ -261,7 +261,7 @@ fn main() {
                 }
             };
             println!(
-                "\x1b[1;92mTranspile completed!\n\x1b[0;mThe output code is in \x1b[1m{output}"
+                "\x1b[1;92mTranspile completed!\n\x1b[0;mThe output file is \x1b[1m{output}"
             )
         }
     };
