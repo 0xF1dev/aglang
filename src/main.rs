@@ -32,7 +32,7 @@ enum Commands {
         file: String,
     },
 
-    /// Compile an Aglang file into a Linux ELF64 executable
+    /// Compile an Aglang file into an executable
     Build {
         /// Aglang source file
         file: String,
