@@ -46,10 +46,15 @@ aglang run <FILE>
 aglang build <FILE> -o <OUTPUT>
 ```
 
-_(note: compilation currently only supports x86-64 Linux; if your machine isn't supported, the compiler will give you an
-error)_
+_(note: to build a file, you need to have GCC installed)_
 
-_(note 2: to build a file, you need to have GCC installed)_
+### Transpile to another language
+
+```shell
+aglang transpile <FILE> --target c -o <OUTPUT>
+```
+
+As of version v1.1.0, only C transpiling is supported.
 
 ## Quick reference
 
