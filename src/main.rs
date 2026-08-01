@@ -8,11 +8,13 @@ use std::fs::File;
 use std::io::ErrorKind::NotFound;
 use std::io::Write;
 use std::process::Command;
+use transpiler::transpile_to_c;
 
 pub mod compiler;
 pub mod error;
 mod interpreter;
 pub mod parser;
+pub mod transpiler;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -50,6 +52,20 @@ enum Commands {
         /// Keep the output object file instead of deleting it
         #[arg(long)]
         keep_obj: bool,
+    },
+
+    /// Transpile Aglang code to another language
+    Transpile {
+        /// Aglang source file
+        file: String,
+
+        /// Target language
+        #[arg(short, long, value_enum)]
+        target: transpiler::Target,
+
+        /// Output file
+        #[arg(short, long)]
+        output: String,
     },
 }
 
@@ -117,7 +133,9 @@ fn main() {
             };
             let keep_asm_str = if *keep_asm { "Yes" } else { "No" };
             let keep_obj_str = if *keep_obj { "Yes" } else { "No" };
-            println!("\x1b[1mBuild info:\x1b[0m\n    - Target platform: {target:?} (x86_64)\n    - Keep ASM: {keep_asm_str} ({output}.s)\n    - Keep OBJ: {keep_obj_str} ({output}.o)");
+            println!(
+                "\x1b[1mBuild info:\x1b[0m\n    - Target platform: {target:?} (x86_64)\n    - Keep ASM: {keep_asm_str} ({output}.s)\n    - Keep OBJ: {keep_obj_str} ({output}.o)"
+            );
             let src = match fs::read_to_string(file) {
                 Ok(src) => src,
                 Err(e) => {
@@ -138,7 +156,7 @@ fn main() {
                     std::process::exit(1);
                 }
             };
-            match write_asm_to_file(format!("{output}.s"), asm) {
+            match write_to_file(format!("{output}.s"), asm) {
                 Ok(()) => {
                     spinner.stop_and_persist("\x1b[0;32m🗸", "Assembly generated!\x1b[0m".into())
                 }
@@ -150,7 +168,10 @@ fn main() {
                     std::process::exit(1);
                 }
             };
-            let mut spinner = Spinner::with_timer(Spinners::Dots, "Compiling assembly into executable...".into());
+            let mut spinner = Spinner::with_timer(
+                Spinners::Dots,
+                "Compiling assembly into executable...".into(),
+            );
             match compile_asm(
                 format!("{output}.s"),
                 format!("{output}.o"),
@@ -178,27 +199,75 @@ fn main() {
                 }
             }
             if !keep_asm {
-                let mut spinner = Spinner::with_timer(Spinners::Dots, "Removing assembly file...".into());
+                let mut spinner =
+                    Spinner::with_timer(Spinners::Dots, "Removing assembly file...".into());
                 fs::remove_file(format!("{output}.s")).unwrap();
-                spinner.stop_and_persist(
-                    "\x1b[0;32m🗸",
-                    "Assembly file removed!\x1b[0m".into(),
-                );
+                spinner.stop_and_persist("\x1b[0;32m🗸", "Assembly file removed!\x1b[0m".into());
             }
             if !keep_obj {
-                let mut spinner = Spinner::with_timer(Spinners::Dots, "Removing object file...".into());
+                let mut spinner =
+                    Spinner::with_timer(Spinners::Dots, "Removing object file...".into());
                 fs::remove_file(format!("{output}.o")).unwrap();
-                spinner.stop_and_persist(
-                    "\x1b[0;32m🗸",
-                    "Object file removed!\x1b[0m".into(),
-                );
+                spinner.stop_and_persist("\x1b[0;32m🗸", "Object file removed!\x1b[0m".into());
             }
-            println!("\x1b[1;92mBuild completed!\n\x1b[0;mThe output executable is in \x1b[1m{output}")
+            println!(
+                "\x1b[1;92mBuild completed!\n\x1b[0;mThe output executable is in \x1b[1m{output}"
+            )
+        }
+        Commands::Transpile {
+            file,
+            target,
+            output,
+        } => {
+            println!(
+                "Transpiling \x1b[1m{file}\x1b[0m to \x1b[1m{target:?}\x1b[0m"
+            );
+            let src = match fs::read_to_string(file) {
+                Ok(src) => src,
+                Err(e) => {
+                    eprintln!("\x1b[1;31mCould not open source file: {e}");
+                    std::process::exit(1);
+                }
+            };
+            let mut spinner =
+                Spinner::with_timer(Spinners::Dots, format!("Transpiling into {target:?}...").into());
+            let statements = parser::parse_source(src);
+            let code = match target {
+                transpiler::Target::C => {
+                    transpile_to_c(statements)
+                }
+            }.inspect_err(|e| {
+                spinner.stop_and_persist(
+                    "\x1b[1;31m✖",
+                    format!("Could not transpile: \x1b[0m {e}"),
+                );
+                std::process::exit(1);
+            }).unwrap();
+            spinner.stop_and_persist("\x1b[0;32m🗸", "Code transpiled!\x1b[0m".into());
+            let mut spinner = Spinner::with_timer(
+                Spinners::Dots,
+                "Writing code...".into(),
+            );
+            match write_to_file(format!("{output}"), code) {
+                Ok(()) => {
+                    spinner.stop_and_persist("\x1b[0;32m🗸", "Code written to file!\x1b[0m".into())
+                }
+                Err(e) => {
+                    spinner.stop_and_persist(
+                        "\x1b[1;31m✖",
+                        format!("Could not write file: \x1b[0m {e}"),
+                    );
+                    std::process::exit(1);
+                }
+            };
+            println!(
+                "\x1b[1;92mTranspile completed!\n\x1b[0;mThe output code is in \x1b[1m{output}"
+            )
         }
     };
 }
 
-fn write_asm_to_file(filename: String, source: String) -> Result<(), Box<dyn Error>> {
+fn write_to_file(filename: String, source: String) -> Result<(), Box<dyn Error>> {
     let mut file = File::create(filename)?;
     file.write_all(source.as_bytes())?;
     Ok(())
