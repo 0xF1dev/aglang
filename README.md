@@ -8,6 +8,8 @@ This repository contains the CLI with an interpreter and a compiler.
 
 _If you're looking for the website's repository, you can find it [here](https://github.com/0xF1dev/aglang-website)._
 
+_If you're looking for the VSCode extension, you can find the repository [here](https://github.com/0xF1dev/aglang-extension)._
+
 ## Introduction
 
 Aglang is **relatively simple** compared to other esolangs, like **Brainf*ck**. In it, the programmer has three things
